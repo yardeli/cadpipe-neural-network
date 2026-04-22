@@ -336,13 +336,20 @@ def evaluate_model(model, splits, norm, verbose=True):
 
 def save_checkpoint(model, norm, metrics, path):
     """Save model checkpoint with normalization and metrics."""
+    # Extract hidden sizes from the model architecture
+    hidden_sizes = []
+    for module in model.net:
+        if isinstance(module, nn.Linear) and module.out_features != len(PlasmaNet.OUTPUT_FEATURES):
+            hidden_sizes.append(module.out_features)
     checkpoint = {
         "model_state": model.state_dict(),
         "norm": {k: v.numpy().tolist() for k, v in norm.items()},
         "metrics": metrics,
+        "hidden_sizes": hidden_sizes,
+        "dropout": model.dropout_rate,
         "input_features": PlasmaNet.INPUT_FEATURES,
         "output_features": PlasmaNet.OUTPUT_FEATURES,
-        "version": "1.0",
+        "version": "1.1",
     }
     torch.save(checkpoint, path)
     size_kb = Path(path).stat().st_size / 1024
@@ -352,7 +359,9 @@ def save_checkpoint(model, norm, metrics, path):
 def load_checkpoint(path, device="cpu"):
     """Load model from checkpoint."""
     checkpoint = torch.load(path, map_location=device, weights_only=False)
-    model = PlasmaNet()
+    hidden_sizes = tuple(checkpoint.get("hidden_sizes", (64, 128, 128, 64)))
+    dropout = checkpoint.get("dropout", 0.05)
+    model = PlasmaNet(hidden_sizes=hidden_sizes, dropout=dropout)
     model.load_state_dict(checkpoint["model_state"])
     model.eval()
 
