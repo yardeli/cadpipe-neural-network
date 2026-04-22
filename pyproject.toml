@@ -1,0 +1,31 @@
+[project]
+name = "plasmanet"
+version = "0.1.0"
+description = "Neural surrogate for hypersonic plasma prediction"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "torch>=2.0",
+]
+
+[project.optional-dependencies]
+train = [
+    "scipy>=1.10",
+    "matplotlib>=3.7",
+    "cantera>=3.0",
+]
+serve = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+]
+all = [
+    "scipy>=1.10",
+    "matplotlib>=3.7",
+    "cantera>=3.0",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends._legacy:_Backend"

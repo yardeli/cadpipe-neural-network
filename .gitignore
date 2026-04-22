@@ -1,0 +1,26 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.egg-info/
+dist/
+build/
+
+# Data files (large, regeneratable)
+data/*.npz
+data/*.json
+
+# Model checkpoints (large, regeneratable)
+checkpoints/*.pt
+
+# Keep directory structure
+!data/.gitkeep
+!checkpoints/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
