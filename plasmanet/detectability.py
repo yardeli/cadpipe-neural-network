@@ -222,6 +222,7 @@ def analyze_detectability(
     source_distance_m: float = 500.0,   # typical ground radar slant range
     use_cantera: bool = True,
     use_neq: bool = False,
+    cfd_field_npz: Optional[str] = None,  # path to saved CFDFieldResult
     verbose: bool = False,
 ) -> DetectabilityReport:
     """Predict radar detectability of a vehicle under given conditions.
@@ -257,8 +258,22 @@ def analyze_detectability(
     p_stag = analysis["p_stag_Pa"]
     fp = analysis["fp_GHz"]
 
-    # Step 2: build sheath field from stagnation prediction
-    field_median = build_sheath_field_from_analysis(analysis, vehicle)
+    # Step 2: build plasma field.
+    # - If a CFD field NPZ is provided, use real CFD-derived ne(x,y,z).
+    # - Otherwise, build the analytical SheathProfile from stagnation values.
+    if cfd_field_npz is not None:
+        from .cfd_field import load_cfd_field, build_unstructured_field
+        cfd = load_cfd_field(cfd_field_npz)
+        field_median = build_unstructured_field(cfd)
+        # Use CFD stagnation for reporting
+        ne_peak = cfd.stag_point["ne_m3"]
+        T_stag = cfd.stag_point["T_K"]
+        p_stag = cfd.stag_point["p_Pa"]
+        fp = plasma_frequency_ghz(ne_peak)
+        target_override = np.asarray(cfd.stag_point["xyz"], dtype=np.float64)
+    else:
+        field_median = build_sheath_field_from_analysis(analysis, vehicle)
+        target_override = None
 
     # Step 3: LOS scan across aspect angles.
     # Integrate only the near-field region around the vehicle (plasma is zero
@@ -266,7 +281,10 @@ def analyze_detectability(
     # (~1 cm) shock layer when the full source-to-target path is 500+ m.
     # We still quote source_distance in the report as context, but the
     # integration window is bounded to 3×L of the vehicle centre.
-    target_pos = np.array([vehicle.length_m / 2.0, 0.0, 0.0])
+    if target_override is not None:
+        target_pos = target_override
+    else:
+        target_pos = np.array([vehicle.length_m / 2.0, 0.0, 0.0])
     integration_length = min(source_distance_m, 3.0 * vehicle.length_m + 2.0)
     scan_median = scan_aspect(
         field_median, target_position=target_pos,
