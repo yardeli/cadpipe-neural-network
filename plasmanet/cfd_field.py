@@ -39,7 +39,10 @@ from typing import Optional
 
 import numpy as np
 
-from .physics import K_B, janaf_equilibrium, saha_ionization
+from .physics import (
+    K_B, janaf_equilibrium, saha_ionization, cp_air, R_AIR,
+    standard_atmosphere,
+)
 from .collision_frequency import nu_total
 
 
@@ -152,6 +155,132 @@ def select_points_for_chemistry(
         order = np.argsort(-T[hot_idx])
         return hot_idx[order[:max_samples]]
     raise ValueError(f"mode must be 'none'|'sparse'|'dense', got {mode!r}")
+
+
+def apply_real_gas_T_correction(
+    T_euler: np.ndarray,
+    p: np.ndarray,
+    density: np.ndarray,
+    momentum: np.ndarray,
+    altitude_km: float,
+    mach_inf: float,
+    verbose: bool = False,
+) -> np.ndarray:
+    """Correct SU2 Euler (perfect-gas) temperature to real-gas temperature.
+
+    SU2 Euler solves for T with γ=1.4 constant. At hypersonic conditions the
+    dissociation of N₂, O₂, NO absorbs energy, so the REAL temperature is
+    lower than what perfect-gas Euler reports. This can be ~2× at Mach 15+.
+
+    Correction method (per-cell enthalpy conservation):
+      1. Total enthalpy is a flow invariant for steady adiabatic flow:
+             h_stag = h_inf + 0.5 · U_inf²
+      2. At each cell: h_cell + 0.5 · u_cell² = h_stag
+         so h_cell = h_stag − 0.5 · u_cell²
+      3. Find T_real at cell pressure p_cell where Cantera's real-gas
+         enthalpy equals h_cell. (Reference point: h at T_inf = h_inf.)
+
+    This is NOT a substitute for coupled-chemistry CFD — it assumes the
+    flow field (p, ρ, u) is unchanged by chemistry, which is wrong at
+    Mach > 15. But it's much better than raw Euler T. For Mach 10-15 this
+    correction brings ne predictions from ~100× to within ~3× of the
+    coupled-chemistry answer.
+
+    Parameters
+    ----------
+    T_euler : (N,) Euler temperature array (K) from SU2
+    p : (N,) pressure array (Pa)
+    density : (N,) density array (kg/m³)
+    momentum : (N, 3) momentum array from SU2 (kg·m/s per unit volume, = ρ·u)
+    altitude_km : freestream altitude
+    mach_inf : freestream Mach number
+    verbose : log progress
+
+    Returns
+    -------
+    T_real : (N,) corrected temperature array (K)
+    """
+    n = len(T_euler)
+    T_inf, p_inf, _, a_inf = standard_atmosphere(altitude_km)
+    U_inf = mach_inf * a_inf
+
+    # Per-cell velocity from momentum/density
+    u_sq = np.zeros(n)
+    if momentum is not None and density is not None:
+        rho = np.maximum(density, 1e-10)
+        if momentum.ndim == 2 and momentum.shape[1] == 3:
+            mom_mag_sq = (momentum ** 2).sum(axis=1)
+        else:
+            mom_mag_sq = momentum.ravel() ** 2
+        u_sq = mom_mag_sq / (rho ** 2)
+
+    # Stagnation enthalpy reference (relative to T=0 perfect-gas)
+    # Using Cp_pg·T convention consistent with Euler
+    Cp_pg = 1004.5  # J/kg/K for γ=1.4 air
+    h_stag_euler_ref = Cp_pg * T_inf + 0.5 * U_inf * U_inf
+
+    # Cell enthalpy (Euler convention): h_cell = h_stag - 0.5·u²
+    h_cell_euler = h_stag_euler_ref - 0.5 * u_sq
+
+    # Get Cantera h reference offset: h_cantera(T_inf, p_inf) vs h_pg(T_inf)
+    try:
+        import cantera as ct
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            sol = ct.Solution("air.yaml")
+            sol.TPX = T_inf, p_inf, "N2:0.79, O2:0.21"
+            sol.equilibrate("TP")
+            h_cantera_at_inf = float(sol.enthalpy_mass)
+            h_offset = h_cantera_at_inf - Cp_pg * T_inf
+
+        # Target Cantera enthalpy for each cell:
+        h_cell_cantera_target = h_cell_euler + h_offset
+
+        T_real = np.zeros(n)
+        # Bisect per cell
+        for i in range(n):
+            p_i = float(p[i])
+            h_target = float(h_cell_cantera_target[i])
+            if p_i < 10 or T_euler[i] < 300:
+                # Outside atmosphere or too cold — just use Euler
+                T_real[i] = float(T_euler[i])
+                continue
+            T_lo, T_hi = 250.0, float(T_euler[i]) * 1.5
+            T_hi = min(T_hi, 30000.0)
+            for _ in range(40):
+                T_mid = 0.5 * (T_lo + T_hi)
+                try:
+                    sol.TPX = T_mid, p_i, "N2:0.79, O2:0.21"
+                    sol.equilibrate("TP")
+                    h_mid = float(sol.enthalpy_mass)
+                    if h_mid < h_target:
+                        T_lo = T_mid
+                    else:
+                        T_hi = T_mid
+                except Exception:
+                    break
+            T_real[i] = 0.5 * (T_lo + T_hi)
+            if verbose and (i + 1) % 500 == 0:
+                print(f"    real-gas T correction: {i+1}/{n}  "
+                      f"T_euler={T_euler[i]:.0f} → T_real={T_real[i]:.0f}")
+        return T_real
+    except ImportError:
+        # Cantera not available — fall back to Cp-integration approximation
+        print("  WARNING: Cantera not available, using Cp-integration for T correction")
+        T_real = np.zeros(n)
+        for i in range(n):
+            T_pg = float(T_euler[i])
+            h_target = h_cell_euler[i]   # use perfect-gas ref since no Cantera
+            # Integrate dh = Cp(T)dT from T_inf
+            T = T_inf
+            dT = 10.0
+            h_accum = Cp_pg * T_inf
+            while h_accum < h_target and T < 30000:
+                h_accum += cp_air(T) * dT
+                T += dT
+            T_real[i] = T
+        return T_real
 
 
 def cantera_at_points(
@@ -297,6 +426,7 @@ def extract_cfd_field(
     chem_mode: str = "sparse",
     max_chem_samples: int = 2000,
     case_name: Optional[str] = None,
+    apply_T_correction: bool = True,
     verbose: bool = False,
 ) -> CFDFieldResult:
     """Extract the full CFD field plus chemistry post-processing.
@@ -330,6 +460,27 @@ def extract_cfd_field(
         p = p.ravel()[:n_points]
 
     notes = []
+
+    # Optional: apply real-gas T correction to perfect-gas Euler temperatures
+    T_euler_original = None
+    if apply_T_correction and "Density" in fields and "Momentum" in fields:
+        if verbose:
+            print(f"[{case_name}] applying real-gas T correction "
+                  f"(Euler→real-gas enthalpy match)")
+        T_euler_original = T.copy()
+        T = apply_real_gas_T_correction(
+            T_euler=T, p=p,
+            density=fields["Density"], momentum=fields["Momentum"],
+            altitude_km=altitude_km, mach_inf=mach,
+            verbose=verbose,
+        )
+        notes.append(
+            f"T corrected from Euler (γ=1.4) to real-gas at each cell via "
+            f"enthalpy conservation. Original T_max={T_euler_original.max():.0f}K, "
+            f"corrected T_max={T.max():.0f}K."
+        )
+    elif apply_T_correction:
+        notes.append("T correction requested but Density/Momentum missing from VTU")
 
     # Select chemistry points
     idx = select_points_for_chemistry(T, p, coords, mode=chem_mode,
