@@ -100,7 +100,9 @@ def stagnation_temperature_real(T_inf, mach, p_inf):
     try:
         import cantera as ct
         sol = ct.Solution("air.yaml")
-        p_stag = p_inf * (1.0 + 0.2 * mach ** 2) ** 3.5
+        # Use pitot pressure (post-normal-shock stagnation) for hypersonic
+        # blunt-body flow. Isentropic p_stag is only valid for subsonic flow.
+        p_stag = pitot_pressure(p_inf, mach)
         T_lo, T_hi = 300.0, stagnation_temperature_perfect(T_inf, mach) * 1.5
         T_hi = min(T_hi, 30000.0)
         for _ in range(50):
@@ -130,8 +132,65 @@ def stagnation_temperature_real(T_inf, mach, p_inf):
 
 
 def stagnation_pressure(p_inf, mach, gamma=1.4):
-    """Isentropic stagnation pressure (perfect gas)."""
+    """Isentropic stagnation pressure (perfect gas, subsonic flow).
+
+    VALID ONLY for flow without a shock (M < 1, or subsonic inlet). For
+    hypersonic bow-shock flow (what a blunt body at M > 2 sees), the
+    correct stagnation pressure at the body stagnation point is obtained
+    by passing through the normal portion of the bow shock and then
+    decelerating isentropically — use pitot_pressure() for that.
+
+    Kept for backward compatibility and low-Mach regimes.
+    """
     return p_inf * (1.0 + (gamma - 1.0) / 2.0 * mach ** 2) ** (gamma / (gamma - 1.0))
+
+
+def pitot_pressure(p_inf, mach, gamma=1.4):
+    """Rayleigh pitot pressure — stagnation pressure behind a normal shock.
+
+    For a blunt body at M > 1, the flow passes through a detached bow
+    shock. On the stagnation streamline the shock is effectively normal.
+    The stagnation pressure at the body is *not* the isentropic stagnation
+    pressure of the freestream — there is an entropy jump across the shock.
+
+    Rayleigh pitot formula:
+        p_02/p_1 = [((γ+1)² M1²) / (4γ M1² − 2(γ−1))]^(γ/(γ−1))
+                 · (1 − γ + 2γ M1²) / (γ+1)
+
+    At M=10, γ=1.4 this gives p_02/p_1 ≈ 129 versus isentropic
+    (1+0.2·100)^3.5 ≈ 48,168 — a factor of ~370 difference.
+
+    For M < 1, falls back to the isentropic formula.
+
+    Reference: Anderson, "Modern Compressible Flow" 3rd ed. §9.6.
+    """
+    if mach <= 1.0:
+        return stagnation_pressure(p_inf, mach, gamma)
+    gp = gamma + 1.0
+    gm = gamma - 1.0
+    M2 = mach * mach
+    numer = (gp * gp * M2) / (4.0 * gamma * M2 - 2.0 * gm)
+    term1 = numer ** (gamma / gm)
+    term2 = (1.0 - gamma + 2.0 * gamma * M2) / gp
+    return p_inf * term1 * term2
+
+
+def post_shock_conditions(T_inf, p_inf, mach, gamma=1.4):
+    """Perfect-gas post-normal-shock state (before isentropic deceleration).
+
+    Returns (T2, p2, M2) immediately behind a normal shock at freestream
+    Mach M1. Useful for initial-guess bracketing before real-gas
+    Cantera equilibration.
+    """
+    if mach <= 1.0:
+        return T_inf, p_inf, mach
+    M1sq = mach * mach
+    gp = gamma + 1.0
+    gm = gamma - 1.0
+    p_ratio = (2.0 * gamma * M1sq - gm) / gp
+    T_ratio = (2.0 * gamma * M1sq - gm) * (gm * M1sq + 2.0) / (gp * gp * M1sq)
+    M2sq = (gm * M1sq + 2.0) / (2.0 * gamma * M1sq - gm)
+    return T_inf * T_ratio, p_inf * p_ratio, math.sqrt(M2sq)
 
 
 # ── JANAF Dissociation Equilibrium ──
@@ -346,14 +405,34 @@ def radar_status(fp_ghz, radar_freq_ghz=12.0):
         return "DETECTABLE"
 
 
-def full_analysis(mach, altitude_km, nose_radius_m=0.08, use_cantera=True, use_neq=True):
+def full_analysis(mach, altitude_km, nose_radius_m=0.08, use_cantera=True,
+                  use_neq=True, stagnation_pressure_model="pitot"):
     """Complete plasma analysis for one flight condition.
 
-    This is the function used to generate training data.
+    Parameters
+    ----------
+    mach, altitude_km : freestream conditions
+    nose_radius_m : vehicle nose radius (for optional NEQ scaling)
+    use_cantera : use Cantera Gibbs minimisation; fall back to JANAF if False
+    use_neq : apply the non-equilibrium correction (off by default for
+        clean equilibrium training data)
+    stagnation_pressure_model : 'pitot' (Rayleigh formula behind a normal
+        shock — the PHYSICALLY CORRECT choice for hypersonic blunt bodies)
+        or 'isentropic' (legacy — gives p_stag ~10000× too high at M=22,
+        retained only for backward-compatibility with pre-2026-04-23 training
+        checkpoints).
+
     Returns a dict with all predicted quantities.
     """
     T_inf, p_inf, rho_inf, a_inf = standard_atmosphere(altitude_km)
-    p_stag = stagnation_pressure(p_inf, mach)
+    if stagnation_pressure_model == "pitot":
+        p_stag = pitot_pressure(p_inf, mach)
+    elif stagnation_pressure_model == "isentropic":
+        p_stag = stagnation_pressure(p_inf, mach)
+    else:
+        raise ValueError(
+            f"stagnation_pressure_model must be 'pitot' or 'isentropic', "
+            f"got {stagnation_pressure_model!r}")
 
     # Real-gas stagnation temperature
     if use_cantera:
