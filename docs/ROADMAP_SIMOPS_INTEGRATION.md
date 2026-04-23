@@ -205,13 +205,13 @@ Extend the `plasma_analyses` table from the pre-audit doc with one additional co
 
 | Code | Task | Depends On | Status |
 |------|------|------------|--------|
-| C-0 | Inventory SU2-NEMO + Mutation++ on GCP VM | — | **in progress** |
-| C-1 | Resolve SU2-NEMO segfault (root-cause fix from §3.3) | C-0 | — |
-| C-2 | Validate NEMO on blunt_cone M10 @ 30 km | C-1 | — |
-| C-3 | Validate NEMO on RAM-C II 61 km (NEQ test) | C-2 | — |
-| C-4 | Port the 40-case CFD batch to NEMO | C-3 | — |
-| A-1 | Streamline-based chemistry (Path A fallback) | CFD batch complete | **optional, only if C slips** |
-| S-1 | RAM-C validation run against full pipeline with T-corrected Euler | CFD batch complete | **partially ready** |
+| C-0 | Inventory SU2-NEMO + Mutation++ on GCP VM | — | **done** (2026-04-23) |
+| C-1 | Resolve SU2-NEMO segfault (root-cause fix from §3.3) | C-0 | **done** — root cause: missing `FLUID_MODEL= SU2_NONEQ`. See `SU2_NEMO_FIX.md` |
+| C-2 | Validate NEMO on blunt_cone M10 @ 30 km | C-1 | **done** — T_tr=5669K, T_ve=3948K, ne=3.0e18 m⁻³ |
+| C-3 | Validate NEMO on RAM-C II 61 km (NEQ test) | C-2 | **next** — needs RAM-C mesh + Mach 22.5 config |
+| C-4 | Port the 40-case CFD batch to NEMO | C-3 | scaffolding done (`plasmanet/nemo_config.py`) |
+| A-1 | Streamline-based chemistry (Path A fallback) | — | **deprecated** — Path C succeeded, fallback not needed |
+| S-1 | RAM-C validation run against full pipeline with T-corrected Euler | Euler batch complete | **partially ready** |
 
 ### 5.2 Medium-term (weeks 2–5)
 
@@ -237,13 +237,19 @@ Extend the `plasma_analyses` table from the pre-audit doc with one additional co
 
 ### 5.4 Milestone stack
 
-1. **Week 1 end:** NEMO segfault fixed, blunt_cone M10 passes
-2. **Week 2 end:** RAM-C 61 km NEMO prediction within factor of 2 of measured
-3. **Week 3 end:** 40-case batch ported to NEMO, `analyze_detectability(cfd_field=NEMO_output)` produces aspect-resolved reports
+1. **Week 1 end:** NEMO segfault fixed, blunt_cone M10 passes ✓ **done 2026-04-23 (day 1)**
+2. **Week 2 end:** RAM-C 61 km NEMO prediction within factor of 2 of measured — *pending mesh*
+3. **Week 3 end:** 40-case batch ported to NEMO, `analyze_detectability(cfd_field=NEMO_output)` produces aspect-resolved reports — *scaffolding ready*
 4. **Week 4 end:** SimOps `/api/plasma/analyze` live on staging
 5. **Week 5 end:** Frontend polar plot + envelope UI shipped
 6. **Week 8 end:** AFRL SBIR demo ready
 7. **Week 10 end:** Paper submitted
+
+### 5.4.1 Progress log (2026-04-23)
+
+- **+0 h:** Path C planned. Prior debug attempts had left the SU2-NEMO segfault unresolved.
+- **+2 h:** Root cause identified (missing `FLUID_MODEL= SU2_NONEQ`), Mutation++ data files installed, first working NEMO run. T_tr=5669K / T_ve=3948K — real 2-T NEQ signature.
+- **+3 h:** `extract_nemo_field()` + `nemo_config.py` + end-to-end pipeline tests. Mach 10 @ 30 km aspect-resolved detectability from NEMO coupled-chemistry CFD: nose-on 6.3 dB (DEGRADED), side-on 0.7 dB (DETECTABLE).
 
 ### 5.5 Risk register
 
