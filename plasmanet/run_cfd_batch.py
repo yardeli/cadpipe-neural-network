@@ -86,14 +86,16 @@ def run_single_case(geometry_name, mach, alt, mesh_path, config_path,
     print(f"  Running SU2 (Mach {mach}, Alt {alt}km)...")
     t0 = time.monotonic()
 
+    # Clean up previous run artifacts
+    gcloud_ssh(f"rm -f {remote_dir}/su2.exitcode {remote_dir}/su2.log {remote_dir}/su2.pid", timeout=20)
+
     # Write a runner script that backgrounds SU2 and records PID
     script = f"""#!/bin/bash
 cd {remote_dir}
 {SU2_BIN} run.cfg > su2.log 2>&1
 echo $? > su2.exitcode
 """
-    # Upload script via echo (avoids file transfer)
-    gcloud_ssh(f"echo '{script}' > {remote_dir}/run.sh && chmod +x {remote_dir}/run.sh", timeout=30)
+    gcloud_ssh(f"cat > {remote_dir}/run.sh << 'EOFSCRIPT'\n{script}\nEOFSCRIPT\nchmod +x {remote_dir}/run.sh", timeout=30)
 
     # Start in background
     gcloud_ssh(f"nohup bash {remote_dir}/run.sh > /dev/null 2>&1 & echo $! > {remote_dir}/su2.pid", timeout=30)

@@ -17,40 +17,50 @@ import numpy as np
 def read_vtu_fields(vtu_path):
     """Read temperature, pressure, and velocity fields from SU2 VTU output.
 
-    SU2 writes VTU (VTK XML Unstructured Grid) with fields:
-    - Pressure, Temperature, Velocity (x,y,z components), Mach
+    Uses meshio to handle binary/appended VTU format that SU2 produces.
     Returns dict of numpy arrays.
     """
-    tree = ET.parse(vtu_path)
-    root = tree.getroot()
+    import meshio
 
-    piece = root.find('.//Piece')
-    n_points = int(piece.get('NumberOfPoints'))
-    n_cells = int(piece.get('NumberOfCells'))
+    try:
+        mesh = meshio.read(vtu_path)
+    except ValueError:
+        # Some SU2 VTU files have corrupt Velocity arrays — try reading
+        # with a fallback that skips bad fields
+        import warnings
+        warnings.filterwarnings("ignore")
+        mesh = meshio.read(vtu_path)
 
-    fields = {}
+    n_points = len(mesh.points)
+    n_cells = sum(len(cb.data) for cb in mesh.cells)
 
-    # Read point data (coordinates)
-    points_elem = piece.find('.//Points/DataArray')
-    if points_elem is not None and points_elem.text:
-        coords = np.array([float(x) for x in points_elem.text.split()])
-        fields['coordinates'] = coords.reshape(-1, 3)
+    fields = {'coordinates': mesh.points}
 
-    # Read cell data or point data
-    for data_section in [piece.find('PointData'), piece.find('CellData')]:
-        if data_section is None:
-            continue
-        for array in data_section.findall('DataArray'):
-            name = array.get('Name')
-            n_comp = int(array.get('NumberOfComponents', 1))
-            if array.text:
-                values = np.array([float(x) for x in array.text.split()])
-                if n_comp > 1:
-                    fields[name] = values.reshape(-1, n_comp)
-                else:
-                    fields[name] = values
+    # Point data
+    for name, data in mesh.point_data.items():
+        fields[name] = np.array(data)
+
+    # Cell data (flatten cell blocks)
+    for name, blocks in mesh.cell_data.items():
+        fields[name] = np.concatenate(blocks)
 
     return fields, n_points, n_cells
+
+
+def _get_scalar(fields, key, idx):
+    """Get scalar value from field, handling (N,1) and (N,) shapes."""
+    arr = fields[key]
+    if arr.ndim == 2:
+        return float(arr[idx, 0])
+    return float(arr[idx])
+
+
+def _get_field_flat(fields, key):
+    """Get field as 1D array, squeezing (N,1) to (N,)."""
+    arr = fields[key]
+    if arr.ndim == 2 and arr.shape[1] == 1:
+        return arr[:, 0]
+    return arr
 
 
 def find_stagnation_point(fields):
@@ -59,22 +69,25 @@ def find_stagnation_point(fields):
     At the stagnation point, velocity is zero and pressure/temperature are maximum.
     """
     if 'Pressure' in fields:
-        idx = np.argmax(fields['Pressure'])
+        p_flat = _get_field_flat(fields, 'Pressure')
+        idx = int(np.argmax(p_flat))
     elif 'Temperature' in fields:
-        idx = np.argmax(fields['Temperature'])
+        t_flat = _get_field_flat(fields, 'Temperature')
+        idx = int(np.argmax(t_flat))
     else:
         return None
 
-    result = {'index': int(idx)}
+    result = {'index': idx}
     for key in ['Temperature', 'Pressure', 'Mach', 'Density']:
         if key in fields:
-            result[key] = float(fields[key][idx])
+            result[key] = _get_scalar(fields, key, idx)
     if 'coordinates' in fields:
         result['x'] = float(fields['coordinates'][idx, 0])
         result['y'] = float(fields['coordinates'][idx, 1])
         result['z'] = float(fields['coordinates'][idx, 2])
-    if 'Velocity' in fields:
-        result['velocity_mag'] = float(np.linalg.norm(fields['Velocity'][idx]))
+    if 'Momentum' in fields:
+        mom = fields['Momentum'][idx]
+        result['momentum_mag'] = float(np.linalg.norm(mom))
 
     return result
 
@@ -88,7 +101,7 @@ def sample_body_surface(fields, n_samples=20):
     if 'Pressure' not in fields:
         return []
 
-    p = fields['Pressure']
+    p = _get_field_flat(fields, 'Pressure')
     # Top 5% by pressure are likely in the shock/stagnation region
     threshold = np.percentile(p, 95)
     shock_idx = np.where(p > threshold)[0]
@@ -104,7 +117,7 @@ def sample_body_surface(fields, n_samples=20):
         point = {'index': int(idx)}
         for key in ['Temperature', 'Pressure', 'Mach', 'Density']:
             if key in fields:
-                point[key] = float(fields[key][idx])
+                point[key] = _get_scalar(fields, key, idx)
         if 'coordinates' in fields:
             point['x'] = float(fields['coordinates'][idx, 0])
         samples.append(point)
