@@ -1,0 +1,385 @@
+{
+  "geometries": [
+    {
+      "name": "sharp_narrow",
+      "mesh": "data\\cfd_cases\\sharp_narrow\\sharp_narrow_domain.su2",
+      "nose_r": 0.02
+    },
+    {
+      "name": "medium_cone",
+      "mesh": "data\\cfd_cases\\medium_cone\\medium_cone_domain.su2",
+      "nose_r": 0.05
+    },
+    {
+      "name": "blunt_cone",
+      "mesh": "data\\cfd_cases\\blunt_cone\\blunt_cone_domain.su2",
+      "nose_r": 0.08
+    },
+    {
+      "name": "blunt_wide",
+      "mesh": "data\\cfd_cases\\blunt_wide\\blunt_wide_domain.su2",
+      "nose_r": 0.15
+    },
+    {
+      "name": "capsule",
+      "mesh": "data\\cfd_cases\\capsule\\capsule_domain.su2",
+      "nose_r": 0.3
+    }
+  ],
+  "conditions": [
+    {
+      "mach": 8,
+      "alt": 30
+    },
+    {
+      "mach": 8,
+      "alt": 40
+    },
+    {
+      "mach": 10,
+      "alt": 30
+    },
+    {
+      "mach": 10,
+      "alt": 40
+    },
+    {
+      "mach": 12,
+      "alt": 30
+    },
+    {
+      "mach": 12,
+      "alt": 40
+    },
+    {
+      "mach": 15,
+      "alt": 35
+    },
+    {
+      "mach": 15,
+      "alt": 45
+    }
+  ],
+  "cases": [
+    {
+      "geometry": "sharp_narrow",
+      "mach": 8,
+      "alt": 30,
+      "config": "data\\cfd_cases\\sharp_narrow\\M8_A30\\M8_A30.cfg",
+      "mesh": "data\\cfd_cases\\sharp_narrow\\sharp_narrow_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "sharp_narrow",
+      "mach": 8,
+      "alt": 40,
+      "config": "data\\cfd_cases\\sharp_narrow\\M8_A40\\M8_A40.cfg",
+      "mesh": "data\\cfd_cases\\sharp_narrow\\sharp_narrow_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "sharp_narrow",
+      "mach": 10,
+      "alt": 30,
+      "config": "data\\cfd_cases\\sharp_narrow\\M10_A30\\M10_A30.cfg",
+      "mesh": "data\\cfd_cases\\sharp_narrow\\sharp_narrow_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "sharp_narrow",
+      "mach": 10,
+      "alt": 40,
+      "config": "data\\cfd_cases\\sharp_narrow\\M10_A40\\M10_A40.cfg",
+      "mesh": "data\\cfd_cases\\sharp_narrow\\sharp_narrow_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "sharp_narrow",
+      "mach": 12,
+      "alt": 30,
+      "config": "data\\cfd_cases\\sharp_narrow\\M12_A30\\M12_A30.cfg",
+      "mesh": "data\\cfd_cases\\sharp_narrow\\sharp_narrow_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "sharp_narrow",
+      "mach": 12,
+      "alt": 40,
+      "config": "data\\cfd_cases\\sharp_narrow\\M12_A40\\M12_A40.cfg",
+      "mesh": "data\\cfd_cases\\sharp_narrow\\sharp_narrow_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "sharp_narrow",
+      "mach": 15,
+      "alt": 35,
+      "config": "data\\cfd_cases\\sharp_narrow\\M15_A35\\M15_A35.cfg",
+      "mesh": "data\\cfd_cases\\sharp_narrow\\sharp_narrow_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "sharp_narrow",
+      "mach": 15,
+      "alt": 45,
+      "config": "data\\cfd_cases\\sharp_narrow\\M15_A45\\M15_A45.cfg",
+      "mesh": "data\\cfd_cases\\sharp_narrow\\sharp_narrow_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "medium_cone",
+      "mach": 8,
+      "alt": 30,
+      "config": "data\\cfd_cases\\medium_cone\\M8_A30\\M8_A30.cfg",
+      "mesh": "data\\cfd_cases\\medium_cone\\medium_cone_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "medium_cone",
+      "mach": 8,
+      "alt": 40,
+      "config": "data\\cfd_cases\\medium_cone\\M8_A40\\M8_A40.cfg",
+      "mesh": "data\\cfd_cases\\medium_cone\\medium_cone_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "medium_cone",
+      "mach": 10,
+      "alt": 30,
+      "config": "data\\cfd_cases\\medium_cone\\M10_A30\\M10_A30.cfg",
+      "mesh": "data\\cfd_cases\\medium_cone\\medium_cone_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "medium_cone",
+      "mach": 10,
+      "alt": 40,
+      "config": "data\\cfd_cases\\medium_cone\\M10_A40\\M10_A40.cfg",
+      "mesh": "data\\cfd_cases\\medium_cone\\medium_cone_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "medium_cone",
+      "mach": 12,
+      "alt": 30,
+      "config": "data\\cfd_cases\\medium_cone\\M12_A30\\M12_A30.cfg",
+      "mesh": "data\\cfd_cases\\medium_cone\\medium_cone_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "medium_cone",
+      "mach": 12,
+      "alt": 40,
+      "config": "data\\cfd_cases\\medium_cone\\M12_A40\\M12_A40.cfg",
+      "mesh": "data\\cfd_cases\\medium_cone\\medium_cone_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "medium_cone",
+      "mach": 15,
+      "alt": 35,
+      "config": "data\\cfd_cases\\medium_cone\\M15_A35\\M15_A35.cfg",
+      "mesh": "data\\cfd_cases\\medium_cone\\medium_cone_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "medium_cone",
+      "mach": 15,
+      "alt": 45,
+      "config": "data\\cfd_cases\\medium_cone\\M15_A45\\M15_A45.cfg",
+      "mesh": "data\\cfd_cases\\medium_cone\\medium_cone_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "blunt_cone",
+      "mach": 8,
+      "alt": 30,
+      "config": "data\\cfd_cases\\blunt_cone\\M8_A30\\M8_A30.cfg",
+      "mesh": "data\\cfd_cases\\blunt_cone\\blunt_cone_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "blunt_cone",
+      "mach": 8,
+      "alt": 40,
+      "config": "data\\cfd_cases\\blunt_cone\\M8_A40\\M8_A40.cfg",
+      "mesh": "data\\cfd_cases\\blunt_cone\\blunt_cone_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "blunt_cone",
+      "mach": 10,
+      "alt": 30,
+      "config": "data\\cfd_cases\\blunt_cone\\M10_A30\\M10_A30.cfg",
+      "mesh": "data\\cfd_cases\\blunt_cone\\blunt_cone_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "blunt_cone",
+      "mach": 10,
+      "alt": 40,
+      "config": "data\\cfd_cases\\blunt_cone\\M10_A40\\M10_A40.cfg",
+      "mesh": "data\\cfd_cases\\blunt_cone\\blunt_cone_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "blunt_cone",
+      "mach": 12,
+      "alt": 30,
+      "config": "data\\cfd_cases\\blunt_cone\\M12_A30\\M12_A30.cfg",
+      "mesh": "data\\cfd_cases\\blunt_cone\\blunt_cone_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "blunt_cone",
+      "mach": 12,
+      "alt": 40,
+      "config": "data\\cfd_cases\\blunt_cone\\M12_A40\\M12_A40.cfg",
+      "mesh": "data\\cfd_cases\\blunt_cone\\blunt_cone_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "blunt_cone",
+      "mach": 15,
+      "alt": 35,
+      "config": "data\\cfd_cases\\blunt_cone\\M15_A35\\M15_A35.cfg",
+      "mesh": "data\\cfd_cases\\blunt_cone\\blunt_cone_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "blunt_cone",
+      "mach": 15,
+      "alt": 45,
+      "config": "data\\cfd_cases\\blunt_cone\\M15_A45\\M15_A45.cfg",
+      "mesh": "data\\cfd_cases\\blunt_cone\\blunt_cone_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "blunt_wide",
+      "mach": 8,
+      "alt": 30,
+      "config": "data\\cfd_cases\\blunt_wide\\M8_A30\\M8_A30.cfg",
+      "mesh": "data\\cfd_cases\\blunt_wide\\blunt_wide_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "blunt_wide",
+      "mach": 8,
+      "alt": 40,
+      "config": "data\\cfd_cases\\blunt_wide\\M8_A40\\M8_A40.cfg",
+      "mesh": "data\\cfd_cases\\blunt_wide\\blunt_wide_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "blunt_wide",
+      "mach": 10,
+      "alt": 30,
+      "config": "data\\cfd_cases\\blunt_wide\\M10_A30\\M10_A30.cfg",
+      "mesh": "data\\cfd_cases\\blunt_wide\\blunt_wide_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "blunt_wide",
+      "mach": 10,
+      "alt": 40,
+      "config": "data\\cfd_cases\\blunt_wide\\M10_A40\\M10_A40.cfg",
+      "mesh": "data\\cfd_cases\\blunt_wide\\blunt_wide_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "blunt_wide",
+      "mach": 12,
+      "alt": 30,
+      "config": "data\\cfd_cases\\blunt_wide\\M12_A30\\M12_A30.cfg",
+      "mesh": "data\\cfd_cases\\blunt_wide\\blunt_wide_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "blunt_wide",
+      "mach": 12,
+      "alt": 40,
+      "config": "data\\cfd_cases\\blunt_wide\\M12_A40\\M12_A40.cfg",
+      "mesh": "data\\cfd_cases\\blunt_wide\\blunt_wide_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "blunt_wide",
+      "mach": 15,
+      "alt": 35,
+      "config": "data\\cfd_cases\\blunt_wide\\M15_A35\\M15_A35.cfg",
+      "mesh": "data\\cfd_cases\\blunt_wide\\blunt_wide_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "blunt_wide",
+      "mach": 15,
+      "alt": 45,
+      "config": "data\\cfd_cases\\blunt_wide\\M15_A45\\M15_A45.cfg",
+      "mesh": "data\\cfd_cases\\blunt_wide\\blunt_wide_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "capsule",
+      "mach": 8,
+      "alt": 30,
+      "config": "data\\cfd_cases\\capsule\\M8_A30\\M8_A30.cfg",
+      "mesh": "data\\cfd_cases\\capsule\\capsule_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "capsule",
+      "mach": 8,
+      "alt": 40,
+      "config": "data\\cfd_cases\\capsule\\M8_A40\\M8_A40.cfg",
+      "mesh": "data\\cfd_cases\\capsule\\capsule_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "capsule",
+      "mach": 10,
+      "alt": 30,
+      "config": "data\\cfd_cases\\capsule\\M10_A30\\M10_A30.cfg",
+      "mesh": "data\\cfd_cases\\capsule\\capsule_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "capsule",
+      "mach": 10,
+      "alt": 40,
+      "config": "data\\cfd_cases\\capsule\\M10_A40\\M10_A40.cfg",
+      "mesh": "data\\cfd_cases\\capsule\\capsule_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "capsule",
+      "mach": 12,
+      "alt": 30,
+      "config": "data\\cfd_cases\\capsule\\M12_A30\\M12_A30.cfg",
+      "mesh": "data\\cfd_cases\\capsule\\capsule_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "capsule",
+      "mach": 12,
+      "alt": 40,
+      "config": "data\\cfd_cases\\capsule\\M12_A40\\M12_A40.cfg",
+      "mesh": "data\\cfd_cases\\capsule\\capsule_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "capsule",
+      "mach": 15,
+      "alt": 35,
+      "config": "data\\cfd_cases\\capsule\\M15_A35\\M15_A35.cfg",
+      "mesh": "data\\cfd_cases\\capsule\\capsule_domain.su2",
+      "status": "pending"
+    },
+    {
+      "geometry": "capsule",
+      "mach": 15,
+      "alt": 45,
+      "config": "data\\cfd_cases\\capsule\\M15_A45\\M15_A45.cfg",
+      "mesh": "data\\cfd_cases\\capsule\\capsule_domain.su2",
+      "status": "pending"
+    }
+  ]
+}
