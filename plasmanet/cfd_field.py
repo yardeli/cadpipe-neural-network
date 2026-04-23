@@ -541,6 +541,193 @@ def extract_cfd_field(
     )
 
 
+def extract_nemo_field(
+    vtu_path: str,
+    geometry: str, mach: float, altitude_km: float,
+    case_name: Optional[str] = None,
+    verbose: bool = False,
+) -> CFDFieldResult:
+    """Extract a SU2-NEMO (two-temperature coupled-chemistry) VTU into a
+    CFDFieldResult.
+
+    Unlike extract_cfd_field() which reads SU2 Euler perfect-gas output and
+    post-processes chemistry, this function consumes SU2-NEMO output
+    directly. NEMO already solves the multi-species two-temperature
+    Navier-Stokes, so we don't need real-gas T correction or per-cell
+    equilibrium Cantera calls.
+
+    Field-name convention (SU2 v7.5.1 NEMO, GAS_MODEL= AIR-5):
+      Density_0 = rho_N2,  Density_1 = rho_O2,  Density_2 = rho_NO,
+      Density_3 = rho_N,   Density_4 = rho_O
+      MassFrac_i = same order
+      Temperature_tr = trans-rot temperature (K)
+      Temperature_ve = vib-electronic temperature (K)
+      Pressure, Mach, Momentum, Energy, Energy_ve
+
+    For AIR-11 the Density_0 field is electrons, Density_1..5 are ions,
+    Density_6..10 are neutrals (N, O, NO, N2, O2).
+
+    Since NEMO AIR-5 doesn't carry electrons in the flow solver, we
+    post-process ionisation using the two-temperature Saha model: electron
+    temperature = T_ve (electrons equilibrate with vibrational modes),
+    heavy-particle temperatures = T_tr. This is the Park two-temperature
+    convention.
+    """
+    if case_name is None:
+        case_name = Path(vtu_path).parent.name
+
+    if verbose:
+        print(f"[{case_name}] reading NEMO VTU…")
+    fields, n_points, n_cells = read_vtu_fields(vtu_path)
+
+    # Detect NEMO field layout
+    is_nemo = "Temperature_tr" in fields
+    if not is_nemo:
+        raise ValueError(
+            f"VTU {vtu_path} doesn't look like NEMO output "
+            f"(missing Temperature_tr). For SU2 Euler use extract_cfd_field()."
+        )
+
+    # Number of species from Density_* fields
+    n_species = sum(1 for k in fields if k.startswith("Density_"))
+
+    T_tr = fields["Temperature_tr"]
+    T_ve = fields["Temperature_ve"]
+    p = fields["Pressure"]
+    coords = fields["coordinates"]
+    if T_tr.shape != (n_points,):
+        T_tr = T_tr.ravel()[:n_points]
+    if T_ve.shape != (n_points,):
+        T_ve = T_ve.ravel()[:n_points]
+    if p.shape != (n_points,):
+        p = p.ravel()[:n_points]
+
+    notes = [
+        f"NEMO {n_species}-species output: T_tr range "
+        f"[{T_tr.min():.0f}, {T_tr.max():.0f}] K; "
+        f"T_ve range [{T_ve.min():.0f}, {T_ve.max():.0f}] K"
+    ]
+
+    # Assemble mass fractions by species
+    mass_fracs = {}
+    x_N2_full = np.full(n_points, 0.79)
+    x_O2_full = np.full(n_points, 0.21)
+    x_NO_full = np.zeros(n_points)
+    x_O_full = np.zeros(n_points)
+    x_N_full = np.zeros(n_points)
+    ne_full = np.zeros(n_points)
+
+    if n_species == 5:
+        # AIR-5: order N2, O2, NO, N, O
+        from .physics import R_UNIVERSAL
+        # Molar masses (kg/mol)
+        M_N2 = 0.0280134
+        M_O2 = 0.0319988
+        M_NO = 0.0300061
+        M_N  = 0.0140067
+        M_O  = 0.0159994
+        rho = np.zeros(n_points)
+        for i in range(5):
+            rho_i = fields[f"Density_{i}"]
+            rho += rho_i
+        # Mass fractions as fractions of total density
+        y = {}
+        for sp, i in [("N2",0), ("O2",1), ("NO",2), ("N",3), ("O",4)]:
+            y_i = fields[f"MassFrac_{i}"]
+            if y_i.ndim == 2 and y_i.shape[1] == 1:
+                y_i = y_i[:, 0]
+            y[sp] = np.maximum(y_i, 0.0)
+        # Convert mass fractions to mole fractions
+        inv_M = y["N2"]/M_N2 + y["O2"]/M_O2 + y["NO"]/M_NO + y["N"]/M_N + y["O"]/M_O
+        inv_M = np.maximum(inv_M, 1e-30)
+        x_N2_full = (y["N2"]/M_N2) / inv_M
+        x_O2_full = (y["O2"]/M_O2) / inv_M
+        x_NO_full = (y["NO"]/M_NO) / inv_M
+        x_N_full  = (y["N"]/M_N)   / inv_M
+        x_O_full  = (y["O"]/M_O)   / inv_M
+
+        # Two-temperature Saha ionisation at each cell:
+        #   electron temperature = T_ve (Park convention)
+        #   partial densities of N, O, NO come from T_tr-determined chemistry
+        from .physics import saha_ionization
+        if verbose:
+            print(f"[{case_name}] applying 2-T Saha ionisation (T_e = T_ve)…")
+        for i in range(n_points):
+            Tv = float(T_ve[i])
+            if Tv < 1500 or p[i] < 10:
+                continue
+            # Saha uses electron temperature T_ve for ionisation energy weighting
+            ne_full[i] = saha_ionization(
+                Tv, float(p[i]),
+                float(x_NO_full[i]), float(x_O_full[i]), float(x_N_full[i]),
+            )
+
+    elif n_species == 11:
+        # AIR-11: order e-, N+, O+, NO+, N2+, O2+, N, O, NO, N2, O2
+        # Electrons come directly from the solver
+        notes.append("AIR-11 NEMO: using solver electron density directly")
+        rho_e = fields["Density_0"]
+        if rho_e.ndim == 2 and rho_e.shape[1] == 1:
+            rho_e = rho_e[:, 0]
+        ne_full = rho_e / 9.10938e-31  # rho_e / m_e
+        # Neutral mass fractions
+        for sp, i in [("N",6), ("O",7), ("NO",8), ("N2",9), ("O2",10)]:
+            y_i = fields[f"MassFrac_{i}"]
+            if y_i.ndim == 2 and y_i.shape[1] == 1:
+                y_i = y_i[:, 0]
+            if sp == "N2":  x_N2_full = y_i
+            elif sp == "O2": x_O2_full = y_i
+            elif sp == "NO": x_NO_full = y_i
+            elif sp == "N":  x_N_full = y_i
+            elif sp == "O":  x_O_full = y_i
+    else:
+        raise ValueError(f"NEMO output has {n_species} species, expected 5 or 11")
+
+    # Collision frequencies at each cell (heavy particle T used for ν_en)
+    nu_full = np.zeros(n_points)
+    if verbose:
+        print(f"[{case_name}] computing collision frequencies…")
+    n_total = p / (K_B * np.maximum(T_tr, 100.0))
+    nu_full = np.asarray(nu_total(
+        T_ve, ne_full,
+        n_N2=x_N2_full*n_total, n_O2=x_O2_full*n_total,
+        n_NO=x_NO_full*n_total, n_O=x_O_full*n_total, n_N=x_N_full*n_total,
+    ))
+
+    # Stagnation = max pressure point
+    stag_idx = int(np.argmax(p))
+    stag = {
+        "idx": stag_idx,
+        "T_K": float(T_tr[stag_idx]),
+        "T_ve_K": float(T_ve[stag_idx]),
+        "p_Pa": float(p[stag_idx]),
+        "ne_m3": float(ne_full[stag_idx]),
+        "xyz": coords[stag_idx].astype(np.float64),
+    }
+    if verbose:
+        print(f"[{case_name}] NEMO stag: T_tr={stag['T_K']:.0f}K "
+              f"T_ve={stag['T_ve_K']:.0f}K p={stag['p_Pa']:.2e}Pa "
+              f"ne={stag['ne_m3']:.2e}")
+
+    return CFDFieldResult(
+        case_name=case_name,
+        geometry=geometry,
+        mach=mach, altitude_km=altitude_km,
+        coordinates=coords,
+        T_K=T_tr,   # store T_tr as primary T
+        p_Pa=p,
+        ne_m3=ne_full, nu_c_hz=nu_full,
+        mole_fractions={
+            "N2": x_N2_full, "O2": x_O2_full, "NO": x_NO_full,
+            "O": x_O_full, "N": x_N_full,
+        },
+        chem_mode=f"nemo_air{n_species}",
+        stag_point=stag,
+        n_points=n_points,
+        notes=notes,
+    )
+
+
 def load_cfd_field(npz_path: str) -> CFDFieldResult:
     """Reload a saved CFDFieldResult from .npz."""
     d = np.load(npz_path, allow_pickle=True)
