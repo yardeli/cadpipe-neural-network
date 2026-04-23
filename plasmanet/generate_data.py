@@ -55,7 +55,7 @@ def generate_conditions(n_points, mach_range=(3, 20), alt_range=(15, 55),
     return machs, alts, nose_rs
 
 
-def generate_dataset(n_points=2000, use_cantera=True, seed=42, verbose=True):
+def generate_dataset(n_points=2000, use_cantera=True, use_neq=False, seed=42, verbose=True):
     """Generate the full training dataset.
 
     Returns dict of numpy arrays ready for model training.
@@ -83,7 +83,7 @@ def generate_dataset(n_points=2000, use_cantera=True, seed=42, verbose=True):
         try:
             result = full_analysis(
                 float(machs[i]), float(alts[i]), float(nose_rs[i]),
-                use_cantera=use_cantera)
+                use_cantera=use_cantera, use_neq=use_neq)
 
             T_stag[i] = result["T_stag_K"]
             x_N2[i] = result["x_N2"]
@@ -165,15 +165,19 @@ def main():
     parser.add_argument("--output", type=str, default="data/training_data.npz")
     parser.add_argument("--no-cantera", action="store_true",
                         help="Use JANAF fallback instead of Cantera")
+    parser.add_argument("--neq", action="store_true",
+                        help="Apply non-equilibrium correction (default: off for clean data)")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
     print(f"Generating {args.n_points} training points...")
     print(f"  Cantera: {'disabled' if args.no_cantera else 'enabled (preferred)'}")
+    print(f"  NEQ correction: {'enabled' if args.neq else 'disabled (clean equilibrium data)'}")
 
     dataset, errors = generate_dataset(
         n_points=args.n_points,
         use_cantera=not args.no_cantera,
+        use_neq=args.neq,
         seed=args.seed)
 
     out_path = Path(args.output)

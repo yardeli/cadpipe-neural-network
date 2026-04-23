@@ -47,9 +47,15 @@ def standard_atmosphere(altitude_km):
     elif h < 47000:
         T = 228.65 + 0.0028 * (h - 32000)
         p = 868.02 * (T / 228.65) ** (-12.2009)
-    else:
+    elif h < 51000:
         T = 270.65
-        p = 110.91 * math.exp(-0.00012622 * (h - 47000))
+        p = 110.91 * math.exp(-0.00015769 * (h - 47000))
+    elif h < 71000:
+        T = 270.65 - 0.0028 * (h - 51000)
+        p = 66.939 * (T / 270.65) ** (-12.2009)
+    else:
+        T = 214.65 - 0.002 * (h - 71000)
+        p = 3.9564 * (T / 214.65) ** (17.0816)
     rho = p / (R_AIR * T)
     a = math.sqrt(1.4 * R_AIR * T)
     return T, p, rho, a
@@ -232,11 +238,14 @@ def saha_ionization(T, p, x_NO, x_O, x_N):
     # O: fine structure + excited states
     Q_O = (5.0 + 3.0 * math.exp(-228.0 / T) + 1.0 * math.exp(-326.0 / T)
            + 5.0 * math.exp(-22830.0 / T) + 1.0 * math.exp(-48620.0 / T))
-    Q_Op = (4.0 + 6.0 * math.exp(-38600.0 / T) + 2.0 * math.exp(-58250.0 / T))
+    # O+: 4S_3/2: g=4, 2D(J=3/2+5/2): g=4+6=10 at 38600K, 2P(J=1/2+3/2): g=2+4=6 at 58250K
+    Q_Op = (4.0 + 10.0 * math.exp(-38600.0 / T) + 6.0 * math.exp(-58250.0 / T))
     S_O = 2.0 * (Q_Op / Q_O) * saha_pre * math.exp(-EI_O / (K_B * T))
 
-    # N: ground + excited
-    Q_N = (4.0 + 6.0 * math.exp(-27670.0 / T) + 2.0 * math.exp(-41500.0 / T))
+    # N: ground + excited (NIST ASD, summing J-level degeneracies per term)
+    # 4S_3/2: g=4, 2D(J=3/2+5/2): g=4+6=10 at 27670K, 2P(J=1/2+3/2): g=2+4=6 at 41500K
+    Q_N = (4.0 + 10.0 * math.exp(-27670.0 / T) + 6.0 * math.exp(-41500.0 / T))
+    # N+: 3P(J=0,1,2): g=1+3+5=9 split, 1D_2: g=5, 1S_0: g=1
     Q_Np = (1.0 + 3.0 * math.exp(-70.0 / T) + 5.0 * math.exp(-188.0 / T)
             + 5.0 * math.exp(-22040.0 / T) + 1.0 * math.exp(-47000.0 / T))
     S_N = 2.0 * (Q_Np / Q_N) * saha_pre * math.exp(-EI_N / (K_B * T))
@@ -337,7 +346,7 @@ def radar_status(fp_ghz, radar_freq_ghz=12.0):
         return "DETECTABLE"
 
 
-def full_analysis(mach, altitude_km, nose_radius_m=0.08, use_cantera=True):
+def full_analysis(mach, altitude_km, nose_radius_m=0.08, use_cantera=True, use_neq=True):
     """Complete plasma analysis for one flight condition.
 
     This is the function used to generate training data.
@@ -408,8 +417,11 @@ def full_analysis(mach, altitude_km, nose_radius_m=0.08, use_cantera=True):
     if not cantera_plasma_worked:
         ne_equil = saha_ionization(T_stag, p_stag, x_NO, x_O, x_N)
 
-    # Non-equilibrium correction
-    ne = nonequilibrium_correction(T_stag, ne_equil, nose_radius_m)
+    # Non-equilibrium correction (optional — disabled for clean training data)
+    if use_neq:
+        ne = nonequilibrium_correction(T_stag, ne_equil, nose_radius_m)
+    else:
+        ne = ne_equil
 
     # Plasma frequency
     fp = plasma_frequency_ghz(ne)
