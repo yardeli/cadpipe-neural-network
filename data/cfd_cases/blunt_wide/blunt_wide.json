@@ -1,0 +1,15 @@
+{
+  "nose_radius_m": 0.15,
+  "half_angle_deg": 20,
+  "body_length_m": 1.0,
+  "r_base_m": 0.469,
+  "bbox": {
+    "xmin": 0.0,
+    "xmax": 1.0,
+    "ymin": -0.469,
+    "ymax": 0.469,
+    "zmin": -0.469,
+    "zmax": 0.469
+  },
+  "step_file": "data\\cfd_cases\\blunt_wide\\blunt_wide.step"
+}

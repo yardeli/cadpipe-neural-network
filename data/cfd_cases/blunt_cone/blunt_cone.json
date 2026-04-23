@@ -1,0 +1,15 @@
+{
+  "nose_radius_m": 0.08,
+  "half_angle_deg": 15,
+  "body_length_m": 1.0,
+  "r_base_m": 0.3293,
+  "bbox": {
+    "xmin": 0.0,
+    "xmax": 1.0,
+    "ymin": -0.3293,
+    "ymax": 0.3293,
+    "zmin": -0.3293,
+    "zmax": 0.3293
+  },
+  "step_file": "data\\cfd_cases\\blunt_cone\\blunt_cone.step"
+}

@@ -9,6 +9,10 @@ build/
 # Data files (large, regeneratable)
 data/*.npz
 data/*.json
+data/cfd_cases/**/*.step
+data/cfd_cases/**/*.su2
+data/cfd_cases/**/*.msh
+data/cfd_results/
 
 # Model checkpoints (large, regeneratable)
 checkpoints/*.pt

@@ -136,7 +136,11 @@ def create_flow_domain(body_step_path, domain_factor=8.0):
 
 
 def mesh_domain(domain_step_path, char_length_mm=5.0, output_format="su2"):
-    """Mesh the flow domain with gmsh.
+    """Mesh the flow domain with gmsh, tagging body/farfield boundaries.
+
+    The domain is a sphere with the vehicle body cut out.
+    - Body surface (inner) → tagged as "body" (Euler wall BC in SU2)
+    - Sphere surface (outer) → tagged as "farfield" (farfield BC in SU2)
 
     Returns path to the mesh file.
     """
@@ -150,6 +154,29 @@ def mesh_domain(domain_step_path, char_length_mm=5.0, output_format="su2"):
     gmsh.option.setNumber("General.Terminal", 0)
     gmsh.model.occ.importShapes(domain_step_path)
     gmsh.model.occ.synchronize()
+
+    # Get all surfaces and classify as body (inner) vs farfield (outer)
+    # The domain is sphere - body. The largest surface (by area) is the
+    # outer sphere; everything else is body.
+    surfaces = gmsh.model.getEntities(2)
+    areas = []
+    for dim, tag in surfaces:
+        mass = gmsh.model.occ.getMass(dim, tag)
+        areas.append((tag, mass))
+    areas.sort(key=lambda x: -x[1])
+
+    # Largest surface = farfield (outer sphere)
+    farfield_tag = areas[0][0]
+    body_tags = [t for t, _ in areas[1:]]
+
+    # Create physical groups for SU2 boundary markers
+    gmsh.model.addPhysicalGroup(2, body_tags, name="body")
+    gmsh.model.addPhysicalGroup(2, [farfield_tag], name="farfield")
+
+    # Physical group for the volume
+    volumes = gmsh.model.getEntities(3)
+    vol_tags = [t for _, t in volumes]
+    gmsh.model.addPhysicalGroup(3, vol_tags, name="fluid")
 
     # Set mesh size
     gmsh.option.setNumber("Mesh.CharacteristicLengthMax", char_length_mm / 1000)
@@ -168,7 +195,7 @@ def mesh_domain(domain_step_path, char_length_mm=5.0, output_format="su2"):
     gmsh.write(str(mesh_path))
     gmsh.finalize()
 
-    print(f"  Meshed: {n_nodes} nodes -> {mesh_path.name}")
+    print(f"  Meshed: {n_nodes} nodes ({len(body_tags)} body faces, 1 farfield face) -> {mesh_path.name}")
     return str(mesh_path)
 
 
