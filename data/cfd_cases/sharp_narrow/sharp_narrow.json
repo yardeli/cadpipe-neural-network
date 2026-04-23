@@ -1,0 +1,15 @@
+{
+  "nose_radius_m": 0.02,
+  "half_angle_deg": 7,
+  "body_length_m": 0.5,
+  "r_base_m": 0.0791,
+  "bbox": {
+    "xmin": 0.0,
+    "xmax": 0.5,
+    "ymin": -0.0791,
+    "ymax": 0.0791,
+    "zmin": -0.0791,
+    "zmax": 0.0791
+  },
+  "step_file": "data\\cfd_cases\\sharp_narrow\\sharp_narrow.step"
+}
