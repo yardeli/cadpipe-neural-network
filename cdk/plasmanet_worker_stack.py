@@ -13,14 +13,17 @@ SU2-NEMO Batch EC2 worker for full two-temperature CFD runs.  Resources:
   - Job definition (16 vCPU / 32 GB, 6-hour timeout, 2 retry attempts)
   - CloudWatch log group for Batch jobs (30-day retention)
   - EventBridge rule: Batch Job State Change (SUCCEEDED | FAILED)
-      → Lambda stub that POSTs to KhoriumBackend webhook
-        KHORIUM_BACKEND_URL env var (set at deploy time, no secret in CDK)
+      → Lambda (lambda/simulation_complete/index.py) that POSTs to
+        KhoriumBackend webhook. KHORIUM_BACKEND_URL env var set at deploy time.
 
 Outputs: JobQueueName, JobDefinitionName, SimulationsBucketName
 
 See docs/SIMOPS_INTEGRATION.md §2 (Layer B), §3 (artifact flow), §5 (S3 layout).
 """
 from __future__ import annotations
+
+import os
+from pathlib import Path
 
 import aws_cdk as cdk
 from aws_cdk import (
@@ -36,44 +39,8 @@ from aws_cdk import (
 )
 from constructs import Construct
 
-# Inline Lambda that POSTs the Batch job state change to the KhoriumBackend
-# webhook.  Replace with a real implementation once KhoriumBackend exposes
-# the /api/plasma/simulation_complete endpoint (roadmap milestone I-2).
-_WEBHOOK_CODE = """\
-import json
-import os
-import urllib.request
-
-
-def handler(event, context):
-    base_url = os.environ.get("KHORIUM_BACKEND_URL", "")
-    path = os.environ.get("WEBHOOK_PATH", "/api/plasma/simulation_complete")
-    if not base_url:
-        print("KHORIUM_BACKEND_URL not set — skipping webhook (stub mode)")
-        return {"statusCode": 200, "skipped": True}
-
-    detail = event.get("detail", {})
-    payload = json.dumps({
-        "simulation_id": detail.get("jobName"),
-        "batch_job_id":  detail.get("jobId"),
-        "status":        detail.get("status"),
-        "reason":        detail.get("statusReason", ""),
-    }).encode()
-
-    req = urllib.request.Request(
-        f"{base_url}{path}",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            print(f"Webhook OK: {resp.status}")
-            return {"statusCode": resp.status}
-    except Exception as exc:
-        print(f"Webhook error: {exc}")
-        raise
-"""
+# Path to the extracted Lambda handler directory.
+_LAMBDA_DIR = Path(__file__).parent.parent / "lambda" / "simulation_complete"
 
 
 class PlasmaNetWorkerStack(cdk.Stack):
@@ -323,7 +290,7 @@ class PlasmaNetWorkerStack(cdk.Stack):
             function_name=f"plasmanet-simulation-complete-{env_name}",
             runtime=lambda_.Runtime.PYTHON_3_11,
             handler="index.handler",
-            code=lambda_.Code.from_inline(_WEBHOOK_CODE),
+            code=lambda_.Code.from_asset(str(_LAMBDA_DIR)),
             timeout=cdk.Duration.seconds(30),
             environment={
                 # Set at deploy time — no secret value in CDK source.

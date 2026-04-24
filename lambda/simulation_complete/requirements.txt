@@ -1,0 +1,3 @@
+# No external dependencies — handler uses stdlib (urllib.request, json, os).
+# boto3 is provided by the AWS Lambda managed runtime; add it here only if
+# a specific version is required.
