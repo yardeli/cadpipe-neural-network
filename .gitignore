@@ -20,6 +20,7 @@ data/cfd_cases_nemo/**/ram_c_domain.su2
 data/cfd_cases_nemo/**/ram_c_domain.cgns
 data/cfd_cases_nemo/**/ram_c_domain_raw.su2
 data/cfd_cases_nemo/**/ram_c_meshio.su2
+data/cfd_cases_nemo/ram_c_refined/ram_c_tagged.su2
 data/cfd_cases_nemo/**/solution.dat
 data/cfd_cases_nemo/**/restart.dat
 data/cfd_cases_nemo/**/flow.vtu
