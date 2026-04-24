@@ -11,7 +11,7 @@
  * Props accept the mock_los.json shape directly. No backend wiring needed.
  */
 
-import React, { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { LOSData, FrequencyBand } from "@/types/los";
 
 // ── Geometry helpers ──────────────────────────────────────────────────────────

@@ -1,17 +1,53 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { LOSPolarPlot } from "@/components/LOSPolarPlot";
-import mockData from "@/data/mock_los.json";
+import staticMock from "@/data/mock_los.json";
 import type { LOSData } from "@/types/los";
 
-const data = mockData as unknown as LOSData;
+const MOCK_SERVER = "http://localhost:8200";
 
-const FREQ_LABELS = data.frequencies.map((f) => f.label);
+const MOCK_REQUEST = {
+  vehicle: { nose_radius_m: 0.1524, half_angle_deg: 9.0, length_m: 1.295, name: "ram_c" },
+  flight: { mach: 22.5, altitude_km: 61.0 },
+  aspect_angles_deg: [0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180],
+};
+
+type DataSource = "loading" | "live" | "mock";
 
 export default function App() {
-  const [visibleFreqs, setVisibleFreqs] = useState<number[]>(
-    data.frequencies.map((_, i) => i)
-  );
+  const [data, setData] = useState<LOSData>(staticMock as unknown as LOSData);
+  const [source, setSource] = useState<DataSource>("loading");
+  const [visibleFreqs, setVisibleFreqs] = useState<number[]>([]);
   const [showUQ, setShowUQ] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const res = await fetch(`${MOCK_SERVER}/api/plasma/analyze_scan`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(MOCK_REQUEST),
+          signal: AbortSignal.timeout(4000),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const live = (await res.json()) as LOSData;
+        if (!cancelled) {
+          setData(live);
+          setVisibleFreqs(live.frequencies.map((_, i) => i));
+          setSource("live");
+        }
+      } catch {
+        if (!cancelled) {
+          const fallback = staticMock as unknown as LOSData;
+          setData(fallback);
+          setVisibleFreqs(fallback.frequencies.map((_, i) => i));
+          setSource("mock");
+        }
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
 
   function toggleFreq(i: number) {
     setVisibleFreqs((prev) =>
@@ -23,21 +59,24 @@ export default function App() {
     <div className="min-h-screen bg-background text-foreground p-6">
       <div className="mx-auto max-w-3xl space-y-6">
         {/* Page header */}
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">
-            PlasmaNet — Detection Dashboard
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Aspect-resolved LOS radar attenuation · Mock data (no backend wired)
-          </p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">
+              PlasmaNet — Detection Dashboard
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Aspect-resolved LOS radar attenuation
+            </p>
+          </div>
+          <SourceBadge source={source} />
         </div>
 
         {/* Controls */}
         <div className="flex flex-wrap gap-3 items-center rounded-lg border border-border bg-card p-3">
           <span className="text-xs font-medium text-muted-foreground">Frequencies:</span>
-          {FREQ_LABELS.map((label, i) => (
+          {data.frequencies.map((f, i) => (
             <button
-              key={label}
+              key={f.label}
               onClick={() => toggleFreq(i)}
               className={[
                 "rounded-full px-3 py-1 text-xs font-medium transition-colors",
@@ -46,7 +85,7 @@ export default function App() {
                   : "bg-muted text-muted-foreground hover:bg-muted/80",
               ].join(" ")}
             >
-              {label}
+              {f.label}
             </button>
           ))}
           <div className="ml-auto flex items-center gap-2">
@@ -77,7 +116,7 @@ export default function App() {
           height={380}
         />
 
-        {/* Stagnation summary card */}
+        {/* Stagnation summary cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { label: "Mach", value: data.meta.mach.toFixed(1) },
@@ -96,9 +135,7 @@ export default function App() {
               className="rounded-lg border border-border bg-card p-3 text-center"
             >
               <div className="text-xs text-muted-foreground">{label}</div>
-              <div className="mt-1 text-sm font-semibold tabular-nums">
-                {value}
-              </div>
+              <div className="mt-1 text-sm font-semibold tabular-nums">{value}</div>
             </div>
           ))}
         </div>
@@ -136,15 +173,50 @@ export default function App() {
         )}
 
         <p className="text-xs text-muted-foreground">
-          Static mock data — wire to{" "}
-          <code className="rounded bg-muted px-1">POST /api/plasma/analyze</code>{" "}
-          to show live predictions. See{" "}
-          <code className="rounded bg-muted px-1">
-            docs/SIMOPS_INTEGRATION.md
-          </code>{" "}
-          for the API contract.
+          {source === "live" ? (
+            <>
+              Live data from{" "}
+              <code className="rounded bg-muted px-1">
+                POST {MOCK_SERVER}/api/plasma/analyze_scan
+              </code>
+            </>
+          ) : (
+            <>
+              Static mock data — start{" "}
+              <code className="rounded bg-muted px-1">mock_server.py</code> on
+              port 8200 to show live predictions. See{" "}
+              <code className="rounded bg-muted px-1">
+                docs/SIMOPS_INTEGRATION.md
+              </code>{" "}
+              for the API contract.
+            </>
+          )}
         </p>
       </div>
     </div>
+  );
+}
+
+function SourceBadge({ source }: { source: DataSource }) {
+  if (source === "loading") {
+    return (
+      <span className="mt-1 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs text-muted-foreground animate-pulse">
+        connecting…
+      </span>
+    );
+  }
+  if (source === "live") {
+    return (
+      <span className="mt-1 flex items-center gap-1.5 rounded-full border border-emerald-700 bg-emerald-950 px-2.5 py-0.5 text-xs font-medium text-emerald-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+        LIVE
+      </span>
+    );
+  }
+  return (
+    <span className="mt-1 flex items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+      MOCK
+    </span>
   );
 }
