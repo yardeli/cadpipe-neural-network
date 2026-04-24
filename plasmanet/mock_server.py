@@ -759,4 +759,14 @@ def main():
 
 
 if __name__ == "__main__":
+    import sys as _sys
+    # On Windows the default console encoding is cp1252, which chokes on
+    # Unicode characters (arrows, multiplication signs, etc.) printed during
+    # --dry-run.  Reconfigure stdout/stderr to UTF-8 before anything prints.
+    if _sys.stdout.encoding and _sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
+        try:
+            _sys.stdout.reconfigure(encoding="utf-8")
+            _sys.stderr.reconfigure(encoding="utf-8")
+        except Exception:
+            pass  # Python <3.7 or non-TextIO stdout (e.g. redirected pipe)
     main()
