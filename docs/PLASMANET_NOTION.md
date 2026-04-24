@@ -92,6 +92,19 @@ Six issues surfaced in the 2026-04-23 audit (see `AUDIT_FINDINGS.md`). All resol
 - [ ] **Very high Mach (25+)**: current mechanism is 11-species air. For Mach 25+ planetary entry, carbon ablation species (C, CO, CN) become relevant (not in scope for HGV detection).
 - [ ] **Body surface emissivity and antenna gain** not modelled. Radar link budget analysis assumes isotropic target, which is a first-order approximation.
 
+### 3.5 What chemistry analysis do we actually use?
+
+This comes up often because the pre-audit documents referenced a `reaction_search.py` "DRGEP" tool. **None of that tool's output feeds the current prediction stack.** The chemistry paths in use are:
+
+| Prediction mode | Chemistry source | Uses `reaction_search.py`? |
+|---|---|---|
+| Analytical equilibrium (instant mode) | Cantera Gibbs free-energy minimisation on the full 11-species `air_plasma_11s.yaml` mechanism | No — uses thermodynamic data only, not rates |
+| Saha ionisation (fallback) | NIST partition functions + analytical Saha equation | No |
+| SU2-NEMO coupled CFD (Path C) | Full 11-species Park/Gupta mechanism — every reaction evaluated at every cell | No — runs all 13 reactions |
+| PlasmaNet NN | Trained on Cantera equilibrium samples | No |
+
+`reaction_search.py` is legacy research code in the companion `cadpipe` repo. Its original leave-one-out methodology was retracted in the audit (conflates pathway existence with rate importance). The post-audit corrected version (DRGEP on a transient 0D reactor) produced a valid *ranking* — N₂ dissociation is the rate-limiting step — but we do not use that ranking anywhere in production. We just run the full mechanism, because that is what NEMO and Cantera do natively, and the cost savings from mechanism reduction would be < 10% in our regime.
+
 ---
 
 ## 4. Architecture
