@@ -104,17 +104,25 @@ class UQConfig(BaseModel):
     n_samples: int = Field(64, ge=1, le=512)
 
 
+class PlasmaAnalysisParams(BaseModel):
+    """CFD job plasma settings — mirrors SIMOPS_INTEGRATION.md PlasmaAnalysisParams."""
+    gas_model: str = "air_5"              # "air_5" | "air_11"
+    radar_frequency_hz: float = 12e9
+    aspect_angles: Optional[list[float]] = None   # None → default 0–180° every 30°
+    include_uq: bool = True
+
+
 class PlasmaAnalyzeRequest(BaseModel):
-    vehicle: VehicleGeometry = Field(default_factory=VehicleGeometry)
-    flight: FlightCondition
-    radar: RadarParams = Field(default_factory=RadarParams)
-    uncertainty: UQConfig = Field(default_factory=UQConfig)
+    vehicle: VehicleGeometry              # required — no default
+    flight: FlightCondition               # required
+    radar: RadarParams                    # required — no default
+    uncertainty: UQConfig                 # required — no default
 
 
 class PlasmaSubmitCFDRequest(BaseModel):
-    mesh_id: str   # UUID string (no actual DB lookup in mock)
+    mesh_id: str                          # UUID string (no actual DB lookup in mock)
     flight: FlightCondition
-    plasma: Optional[dict] = None    # PlasmaAnalysisParams (opaque in mock)
+    plasma: PlasmaAnalysisParams          # required — typed, not Optional[dict]
     solver: str = "su2_nemo"
 
 
@@ -185,6 +193,39 @@ class RamCBenchmarkResponse(BaseModel):
     cases: list[RamCCaseResult]
     summary: dict
 
+
+# Aliases matching SIMOPS_INTEGRATION.md class names exactly.
+# Keeps the internal names stable while making the doc names importable.
+DetectabilityReport = DetectabilityResponse      # doc: DetectabilityReport
+PlasmaSubmitCFDResponse = SubmitCFDResponse      # doc: PlasmaSubmitCFDResponse
+RamCBenchmarkResult = RamCBenchmarkResponse      # doc: RamCBenchmarkResult
+
+__all__ = [
+    # Request models
+    "VehicleGeometry",
+    "FlightCondition",
+    "RadarParams",
+    "UQConfig",
+    "PlasmaAnalysisParams",
+    "PlasmaAnalyzeRequest",
+    "PlasmaSubmitCFDRequest",
+    "MultiFreqScanRequest",
+    # Response models (internal names)
+    "StagnationState",
+    "UQBand",
+    "AspectResult",
+    "DetectabilityResponse",
+    "SubmitCFDResponse",
+    "RamCCaseResult",
+    "RamCBenchmarkResponse",
+    # Response model aliases matching SIMOPS_INTEGRATION.md
+    "DetectabilityReport",
+    "PlasmaSubmitCFDResponse",
+    "RamCBenchmarkResult",
+    # Public API
+    "PLASMANET_VERSION",
+    "create_app",
+]
 
 # ── Physics helpers ────────────────────────────────────────────────────────────
 
@@ -663,14 +704,23 @@ def _dry_run():
     print(f"  Validation JSON: {_VALIDATION_JSON}")
     print(f"  Validation JSON exists: {_VALIDATION_JSON.exists()}")
 
-    # Exercise each route with a minimal request
+    # Exercise each route with a minimal request (all fields now required)
     req = PlasmaAnalyzeRequest(
+        vehicle=VehicleGeometry(),
         flight=FlightCondition(mach=10.0, altitude_km=35.0),
+        radar=RadarParams(),
+        uncertainty=UQConfig(),
     )
     resp = _predict(req)
     print(f"  /analyze   → ne={resp.stagnation.ne_m3:.2e}, status={resp.overall_status}")
 
-    scan_req = MultiFreqScanRequest(flight=FlightCondition(mach=10.0, altitude_km=35.0))
+    submit_req = PlasmaSubmitCFDRequest(
+        mesh_id="550e8400-e29b-41d4-a716-446655440000",
+        flight=FlightCondition(mach=10.0, altitude_km=35.0),
+        plasma=PlasmaAnalysisParams(),
+    )
+    print(f"  /submit_cfd→ mesh={submit_req.mesh_id[:8]}…, gas={submit_req.plasma.gas_model}")
+
     bench = _build_benchmark()
     print(f"  /benchmark → {bench.summary['pass_count']}/{bench.summary['total_cases']} cases pass")
 

@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { LOSPolarPlot } from "@/components/LOSPolarPlot";
 import staticMock from "@/data/mock_los.json";
-import type { LOSData } from "@/types/los";
+import type { LOSData, MultiFreqScanRequest } from "@/types/los";
 
 const MOCK_SERVER = "http://localhost:8200";
 
-const MOCK_REQUEST = {
+const MOCK_REQUEST: MultiFreqScanRequest = {
   vehicle: { nose_radius_m: 0.1524, half_angle_deg: 9.0, length_m: 1.295, name: "ram_c" },
   flight: { mach: 22.5, altitude_km: 61.0 },
   aspect_angles_deg: [0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180],

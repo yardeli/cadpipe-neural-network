@@ -1,3 +1,59 @@
+// ── Request types (mirrors plasmanet/mock_server.py Pydantic models) ──────────
+
+export interface VehicleGeometry {
+  nose_radius_m: number;
+  half_angle_deg: number;
+  length_m: number;
+  name: string;
+}
+
+export interface FlightCondition {
+  mach: number;
+  altitude_km: number;
+  sideslip_angle_deg?: number;
+}
+
+export interface RadarParams {
+  frequency_hz: number;
+  aspect_angles_deg?: number[] | null;
+}
+
+export interface UQConfig {
+  enabled: boolean;
+  n_samples?: number;
+}
+
+export interface PlasmaAnalysisParams {
+  gas_model?: string;
+  radar_frequency_hz?: number;
+  aspect_angles?: number[] | null;
+  include_uq?: boolean;
+}
+
+export interface PlasmaAnalyzeRequest {
+  vehicle: VehicleGeometry;
+  flight: FlightCondition;
+  radar: RadarParams;
+  uncertainty: UQConfig;
+}
+
+export interface PlasmaSubmitCFDRequest {
+  mesh_id: string;
+  flight: FlightCondition;
+  plasma: PlasmaAnalysisParams;
+  solver?: string;
+}
+
+/** Convenience multi-band request for POST /api/plasma/analyze_scan */
+export interface MultiFreqScanRequest {
+  vehicle?: VehicleGeometry;
+  flight: FlightCondition;
+  aspect_angles_deg?: number[] | null;
+  uncertainty?: UQConfig;
+}
+
+// ── Response types ────────────────────────────────────────────────────────────
+
 export interface AspectPoint {
   angle_deg: number;
   attenuation_db: number;
