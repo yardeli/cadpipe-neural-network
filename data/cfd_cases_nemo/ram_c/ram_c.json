@@ -1,0 +1,15 @@
+{
+  "nose_radius_m": 0.1524,
+  "half_angle_deg": 9.0,
+  "body_length_m": 2.54,
+  "r_base_m": 0.5325,
+  "bbox": {
+    "xmin": 0.0,
+    "xmax": 2.54,
+    "ymin": -0.5325,
+    "ymax": 0.5325,
+    "zmin": -0.5325,
+    "zmax": 0.5325
+  },
+  "step_file": "C:\\Users\\yarden\\Desktop\\Khorium Hypersonics\\plasmanet\\data\\cfd_cases_nemo\\ram_c\\ram_c.step"
+}

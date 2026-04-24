@@ -249,7 +249,7 @@ def main():
         (case_dir / "ram_c_metadata.json").write_text(json.dumps(meta, indent=2))
         print(f"  Case: {case_dir.name}")
         print(f"    mach={traj['mach']:.1f}, alt={alt} km, "
-              f"ref ne_peak={traj['ref_ne_m3']:.2e} m⁻³")
+              f"ref ne_peak={traj['ref_ne_m3']:.2e} m^-3")
 
     print()
     print("Next: upload to GCP and run SU2-NEMO.")
