@@ -1,0 +1,18 @@
+{
+  "name": "ram_c",
+  "nose_radius_m": 0.1524,
+  "half_angle_deg": 9.0,
+  "body_length_m": 2.54,
+  "altitude_km": 61,
+  "mach": 22.5,
+  "velocity_ms": 7100.0,
+  "published_ne_peak_m3": 2e+19,
+  "reflectometer_stations_zL": [
+    0.14,
+    0.32,
+    0.48,
+    0.67,
+    0.88
+  ],
+  "gas_model": "AIR-5"
+}

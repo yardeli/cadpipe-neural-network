@@ -87,8 +87,8 @@ def main():
     print(f"Conditions: Mach {args.mach} @ {args.altitude} km altitude")
     if ref:
         print(f"Reference: {ref['source']}")
-        print(f"  Published ne_peak: {ref['ne_peak_m3']:.2e} m⁻³ "
-              f"(range {ref['ne_lower']:.1e}–{ref['ne_upper']:.1e})")
+        print(f"  Published ne_peak: {ref['ne_peak_m3']:.2e} m^-3 "
+              f"(range {ref['ne_lower']:.1e}-{ref['ne_upper']:.1e})")
 
     # Step 1: Extract CFD field
     print(f"\nLoading NEMO flow field from {vtu.name}…")
@@ -105,7 +105,7 @@ def main():
     peak_T_tr = float(cfd.T_K[peak_idx])
 
     print(f"\nPeak sheath ne:")
-    print(f"  ne_peak  = {peak_ne:.2e} m⁻³")
+    print(f"  ne_peak  = {peak_ne:.2e} m^-3")
     print(f"  location = ({peak_xyz[0]:.3f}, {peak_xyz[1]:.3f}, {peak_xyz[2]:.3f}) m")
     print(f"  T_tr     = {peak_T_tr:.0f} K")
 
@@ -170,8 +170,8 @@ def main():
         max_att = max(r.attenuation_db for r in results)
         min_att = min(r.attenuation_db for r in results)
         worst = detection_status(max_att)
-        pub_status = status_for_alt(args.altitude, f_hz) if f_hz in (225e6, 450e6, 9.2e9) else "—"
-        match = "✓" if worst == pub_status else ("—" if pub_status == "—" else "✗")
+        pub_status = status_for_alt(args.altitude, f_hz) if f_hz in (225e6, 450e6, 9.2e9) else "-"
+        match = "OK" if worst == pub_status else ("-" if pub_status == "-" else "MISS")
         print(f"  {label:>10s} ({f_hz/1e9:>5.2f} GHz): "
               f"min={min_att:>6.1f} dB, max={max_att:>8.1f} dB, "
               f"worst_status={worst}, published={pub_status} {match}")
@@ -215,7 +215,7 @@ def main():
     }
 
     out_json = Path(args.output_json) if args.output_json else vtu.parent / "ram_c_validation.json"
-    out_json.write_text(json.dumps(report, indent=2, default=str))
+    out_json.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
     print(f"\nJSON report: {out_json}")
 
     # Markdown table for Notion
@@ -230,7 +230,7 @@ def main():
         f"| T_tr (K) | {cfd.stag_point['T_K']:.0f} |",
         f"| T_ve (K) | {cfd.stag_point['T_ve_K']:.0f} |",
         f"| p_stag (Pa) | {cfd.stag_point['p_Pa']:.2e} |",
-        f"| ne_stag (m⁻³) | {cfd.stag_point['ne_m3']:.2e} |",
+        f"| ne_stag (m^-3) | {cfd.stag_point['ne_m3']:.2e} |",
         "",
         "## Peak sheath ne vs published",
         "",
@@ -239,25 +239,25 @@ def main():
         md.extend([
             f"| | Value | Source |",
             f"|---|---|---|",
-            f"| NEMO prediction | {peak_ne:.2e} m⁻³ | this run |",
-            f"| Published reference | {ref['ne_peak_m3']:.2e} m⁻³ (range {ref['ne_lower']:.1e}–{ref['ne_upper']:.1e}) | {ref['source']} |",
+            f"| NEMO prediction | {peak_ne:.2e} m^-3 | this run |",
+            f"| Published reference | {ref['ne_peak_m3']:.2e} m^-3 (range {ref['ne_lower']:.1e}-{ref['ne_upper']:.1e}) | {ref['source']} |",
             f"| log10 error | {log10_error:+.2f} | |",
         ])
     md.extend([
         "",
         "## Reflectometer-frequency LOS attenuation",
         "",
-        f"| Band | Freq (GHz) | Min–Max atten (dB) | NEMO worst | Published | Match |",
+        f"| Band | Freq (GHz) | Min-Max atten (dB) | NEMO worst | Published | Match |",
         f"|---|---|---|---|---|---|",
     ])
     for label, data in aspect_results.items():
         md.append(
             f"| {label} | {data['frequency_hz']/1e9:.2f} | "
-            f"{data['min_attenuation_db']:.1f}–{data['max_attenuation_db']:.1f} | "
+            f"{data['min_attenuation_db']:.1f}-{data['max_attenuation_db']:.1f} | "
             f"{data['worst_status']} | {data['published_status']} | "
-            f"{'✓' if data['matches'] else '✗'} |"
+            f"{'OK' if data['matches'] else 'MISS'} |"
         )
-    out_md.write_text("\n".join(md))
+    out_md.write_text("\n".join(md), encoding="utf-8")
     print(f"Markdown report: {out_md}")
 
 
