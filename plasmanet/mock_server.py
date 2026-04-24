@@ -177,13 +177,15 @@ class SubmitCFDResponse(BaseModel):
 
 
 class RamCCaseResult(BaseModel):
+    model_config = {"populate_by_name": True}
+
     altitude_km: float
     mach: float
     frequency_ghz: float
     ne_predicted_m3: float
     ne_reference_m3: float
     log10_error: float
-    within_uncertainty: bool
+    status_match: bool = Field(alias="within_uncertainty")
     source: str
 
 
@@ -482,7 +484,7 @@ def _build_benchmark() -> RamCBenchmarkResponse:
                 source=source,
             ))
 
-    passing = sum(1 for c in cases if c.within_uncertainty)
+    passing = sum(1 for c in cases if c.status_match)
     return RamCBenchmarkResponse(
         generated_at=now,
         nemo_case_source=str(_VALIDATION_JSON) if _VALIDATION_JSON.exists() else "not found",
