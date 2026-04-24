@@ -1,0 +1,139 @@
+{
+  "meta": {
+    "mach": 10.0,
+    "altitude_km": 35.0,
+    "nose_radius_m": 0.08,
+    "vehicle": "blunt_cone (R_n=0.08m, 15° half-angle)",
+    "engine": "plasmanet_nn",
+    "plasmanet_version": "0.3.0",
+    "stagnation": {
+      "T_tr_K": 5669,
+      "T_ve_K": 3948,
+      "p_Pa": 72200,
+      "ne_m3": 3.0e18,
+      "fp_GHz": 15.5
+    },
+    "uq": {
+      "ne_P05_m3": 1.2e17,
+      "ne_P50_m3": 3.0e18,
+      "ne_P95_m3": 5.4e19,
+      "log10_ne_std": 0.74
+    }
+  },
+  "frequencies": [
+    {
+      "label": "VHF 225 MHz",
+      "frequency_mhz": 225,
+      "color": "#f59e0b",
+      "aspect_scan": [
+        { "angle_deg": 0,   "attenuation_db": 48.2, "status": "BLACKOUT" },
+        { "angle_deg": 15,  "attenuation_db": 39.1, "status": "BLACKOUT" },
+        { "angle_deg": 30,  "attenuation_db": 28.7, "status": "BLACKOUT" },
+        { "angle_deg": 45,  "attenuation_db": 18.3, "status": "BLACKOUT" },
+        { "angle_deg": 60,  "attenuation_db": 10.4, "status": "DEGRADED" },
+        { "angle_deg": 75,  "attenuation_db": 5.1,  "status": "DEGRADED" },
+        { "angle_deg": 90,  "attenuation_db": 2.8,  "status": "DEGRADED" },
+        { "angle_deg": 105, "attenuation_db": 1.9,  "status": "DETECTABLE" },
+        { "angle_deg": 120, "attenuation_db": 1.4,  "status": "DETECTABLE" },
+        { "angle_deg": 135, "attenuation_db": 1.1,  "status": "DETECTABLE" },
+        { "angle_deg": 150, "attenuation_db": 0.9,  "status": "DETECTABLE" },
+        { "angle_deg": 165, "attenuation_db": 0.8,  "status": "DETECTABLE" },
+        { "angle_deg": 180, "attenuation_db": 0.7,  "status": "DETECTABLE" }
+      ]
+    },
+    {
+      "label": "VHF 450 MHz",
+      "frequency_mhz": 450,
+      "color": "#10b981",
+      "aspect_scan": [
+        { "angle_deg": 0,   "attenuation_db": 32.1, "status": "BLACKOUT" },
+        { "angle_deg": 15,  "attenuation_db": 24.8, "status": "BLACKOUT" },
+        { "angle_deg": 30,  "attenuation_db": 16.2, "status": "BLACKOUT" },
+        { "angle_deg": 45,  "attenuation_db": 9.7,  "status": "DEGRADED" },
+        { "angle_deg": 60,  "attenuation_db": 5.2,  "status": "DEGRADED" },
+        { "angle_deg": 75,  "attenuation_db": 2.6,  "status": "DEGRADED" },
+        { "angle_deg": 90,  "attenuation_db": 1.4,  "status": "DETECTABLE" },
+        { "angle_deg": 105, "attenuation_db": 0.9,  "status": "DETECTABLE" },
+        { "angle_deg": 120, "attenuation_db": 0.7,  "status": "DETECTABLE" },
+        { "angle_deg": 135, "attenuation_db": 0.6,  "status": "DETECTABLE" },
+        { "angle_deg": 150, "attenuation_db": 0.5,  "status": "DETECTABLE" },
+        { "angle_deg": 165, "attenuation_db": 0.4,  "status": "DETECTABLE" },
+        { "angle_deg": 180, "attenuation_db": 0.4,  "status": "DETECTABLE" }
+      ]
+    },
+    {
+      "label": "X-band 9.2 GHz",
+      "frequency_mhz": 9200,
+      "color": "#3b82f6",
+      "aspect_scan": [
+        { "angle_deg": 0,   "attenuation_db": 6.3,  "status": "DEGRADED" },
+        { "angle_deg": 15,  "attenuation_db": 4.8,  "status": "DEGRADED" },
+        { "angle_deg": 30,  "attenuation_db": 3.1,  "status": "DEGRADED" },
+        { "angle_deg": 45,  "attenuation_db": 1.9,  "status": "DETECTABLE" },
+        { "angle_deg": 60,  "attenuation_db": 1.2,  "status": "DETECTABLE" },
+        { "angle_deg": 75,  "attenuation_db": 0.8,  "status": "DETECTABLE" },
+        { "angle_deg": 90,  "attenuation_db": 0.6,  "status": "DETECTABLE" },
+        { "angle_deg": 105, "attenuation_db": 0.4,  "status": "DETECTABLE" },
+        { "angle_deg": 120, "attenuation_db": 0.3,  "status": "DETECTABLE" },
+        { "angle_deg": 135, "attenuation_db": 0.3,  "status": "DETECTABLE" },
+        { "angle_deg": 150, "attenuation_db": 0.2,  "status": "DETECTABLE" },
+        { "angle_deg": 165, "attenuation_db": 0.2,  "status": "DETECTABLE" },
+        { "angle_deg": 180, "attenuation_db": 0.2,  "status": "DETECTABLE" }
+      ]
+    },
+    {
+      "label": "Ku-band 12 GHz",
+      "frequency_mhz": 12000,
+      "color": "#a855f7",
+      "aspect_scan": [
+        { "angle_deg": 0,   "attenuation_db": 5.1,  "status": "DEGRADED" },
+        { "angle_deg": 15,  "attenuation_db": 3.7,  "status": "DEGRADED" },
+        { "angle_deg": 30,  "attenuation_db": 2.4,  "status": "DEGRADED" },
+        { "angle_deg": 45,  "attenuation_db": 1.4,  "status": "DETECTABLE" },
+        { "angle_deg": 60,  "attenuation_db": 0.9,  "status": "DETECTABLE" },
+        { "angle_deg": 75,  "attenuation_db": 0.6,  "status": "DETECTABLE" },
+        { "angle_deg": 90,  "attenuation_db": 0.5,  "status": "DETECTABLE" },
+        { "angle_deg": 105, "attenuation_db": 0.3,  "status": "DETECTABLE" },
+        { "angle_deg": 120, "attenuation_db": 0.2,  "status": "DETECTABLE" },
+        { "angle_deg": 135, "attenuation_db": 0.2,  "status": "DETECTABLE" },
+        { "angle_deg": 150, "attenuation_db": 0.2,  "status": "DETECTABLE" },
+        { "angle_deg": 165, "attenuation_db": 0.1,  "status": "DETECTABLE" },
+        { "angle_deg": 180, "attenuation_db": 0.1,  "status": "DETECTABLE" }
+      ]
+    }
+  ],
+  "uq_band": {
+    "frequency_mhz": 12000,
+    "label": "Ku-band 12 GHz (P05–P95)",
+    "aspect_scan_p05": [
+      { "angle_deg": 0,   "attenuation_db": 0.3 },
+      { "angle_deg": 15,  "attenuation_db": 0.2 },
+      { "angle_deg": 30,  "attenuation_db": 0.1 },
+      { "angle_deg": 45,  "attenuation_db": 0.1 },
+      { "angle_deg": 60,  "attenuation_db": 0.05 },
+      { "angle_deg": 75,  "attenuation_db": 0.03 },
+      { "angle_deg": 90,  "attenuation_db": 0.02 },
+      { "angle_deg": 105, "attenuation_db": 0.01 },
+      { "angle_deg": 120, "attenuation_db": 0.01 },
+      { "angle_deg": 135, "attenuation_db": 0.01 },
+      { "angle_deg": 150, "attenuation_db": 0.01 },
+      { "angle_deg": 165, "attenuation_db": 0.01 },
+      { "angle_deg": 180, "attenuation_db": 0.01 }
+    ],
+    "aspect_scan_p95": [
+      { "angle_deg": 0,   "attenuation_db": 24.8 },
+      { "angle_deg": 15,  "attenuation_db": 18.3 },
+      { "angle_deg": 30,  "attenuation_db": 11.7 },
+      { "angle_deg": 45,  "attenuation_db": 6.8 },
+      { "angle_deg": 60,  "attenuation_db": 4.1 },
+      { "angle_deg": 75,  "attenuation_db": 2.4 },
+      { "angle_deg": 90,  "attenuation_db": 1.7 },
+      { "angle_deg": 105, "attenuation_db": 1.1 },
+      { "angle_deg": 120, "attenuation_db": 0.8 },
+      { "angle_deg": 135, "attenuation_db": 0.6 },
+      { "angle_deg": 150, "attenuation_db": 0.5 },
+      { "angle_deg": 165, "attenuation_db": 0.4 },
+      { "angle_deg": 180, "attenuation_db": 0.4 }
+    ]
+  }
+}
