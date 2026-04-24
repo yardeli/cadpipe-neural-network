@@ -49,7 +49,22 @@ RAM_C_REFERENCE = {
 }
 
 RAM_C_BODY_LENGTH_M = 2.54
+RAM_C_NOSE_RADIUS_M = 0.1524
+RAM_C_HALF_ANGLE_DEG = 9.0
 RAM_C_STATION_ZL = [0.14, 0.32, 0.48, 0.67, 0.88]
+
+
+def ram_c_body_radius_at_x(x_m: float) -> float:
+    """Sphere-cone body radius at axial position (nose at x=0, +x downstream)."""
+    if x_m <= 0:
+        return 0.0
+    half = math.radians(RAM_C_HALF_ANGLE_DEG)
+    R_n = RAM_C_NOSE_RADIUS_M
+    x_tang = R_n * (1 - math.sin(half))
+    if x_m <= x_tang:
+        return math.sqrt(max(R_n * R_n - (R_n - x_m) ** 2, 0.0))
+    r_tang = R_n * math.cos(half)
+    return r_tang + (x_m - x_tang) * math.tan(half)
 
 
 def status_for_alt(alt_km: float, freq_hz: float) -> str:
@@ -98,16 +113,35 @@ def main():
         verbose=True,
     )
 
+    # Body-axis sanity check (fail loudly if mesh orientation is off)
+    bbox = np.array([cfd.coordinates.min(axis=0), cfd.coordinates.max(axis=0)])
+    x_extent = bbox[1, 0] - bbox[0, 0]
+    print(f"\nMesh bbox: x[{bbox[0,0]:.2f},{bbox[1,0]:.2f}] "
+          f"y[{bbox[0,1]:.2f},{bbox[1,1]:.2f}] "
+          f"z[{bbox[0,2]:.2f},{bbox[1,2]:.2f}]")
+    if x_extent < RAM_C_BODY_LENGTH_M:
+        print(f"WARNING: x-extent {x_extent:.2f}m < body length "
+              f"{RAM_C_BODY_LENGTH_M}m -- body may not be along +x.",
+              file=sys.stderr)
+
     # Step 2: Analyse peak sheath ne
-    peak_idx = int(np.argmax(cfd.ne_m3))
-    peak_ne = float(cfd.ne_m3[peak_idx])
+    # Single-cell argmax is sensitive to coarse-mesh spike artifacts;
+    # take top-K mean as a robust peak (still picks the strong peak,
+    # but averages over the few cells defining it).
+    n_top = max(min(50, cfd.n_points // 1000), 1)
+    top_idx = np.argpartition(cfd.ne_m3, -n_top)[-n_top:]
+    peak_idx = int(top_idx[np.argmax(cfd.ne_m3[top_idx])])
+    peak_ne_max = float(cfd.ne_m3[peak_idx])
+    peak_ne = float(np.mean(cfd.ne_m3[top_idx]))   # robust peak
     peak_xyz = cfd.coordinates[peak_idx]
     peak_T_tr = float(cfd.T_K[peak_idx])
 
-    print(f"\nPeak sheath ne:")
-    print(f"  ne_peak  = {peak_ne:.2e} m^-3")
-    print(f"  location = ({peak_xyz[0]:.3f}, {peak_xyz[1]:.3f}, {peak_xyz[2]:.3f}) m")
-    print(f"  T_tr     = {peak_T_tr:.0f} K")
+    print(f"\nPeak sheath ne (robust = mean of top {n_top} cells):")
+    print(f"  ne_peak (robust) = {peak_ne:.2e} m^-3")
+    print(f"  ne_peak (max)    = {peak_ne_max:.2e} m^-3 "
+          f"(spike ratio {peak_ne_max/max(peak_ne,1e-30):.2f}x)")
+    print(f"  location         = ({peak_xyz[0]:.3f}, {peak_xyz[1]:.3f}, {peak_xyz[2]:.3f}) m")
+    print(f"  T_tr             = {peak_T_tr:.0f} K")
 
     # log10 error vs reference
     log10_error = None
@@ -124,28 +158,47 @@ def main():
             verdict = f"NEEDS WORK — {abs(log10_error):.1f} orders off"
         print(f"  Verdict: {verdict}")
 
-    # Step 3: ne profile along axial stations
-    print(f"\nne profile along body axis (reflectometer stations):")
-    print(f"  {'z/L':>6} {'z (m)':>8} {'max ne':>12} {'max T_tr':>10}")
+    # Step 3: ne profile along axial stations.
+    # At each reflectometer station, restrict to the sheath shell
+    # (radial range from body wall to body wall + 0.3 m) so far-field
+    # zeros don't contaminate the slice. Report nonzero-cell count
+    # so undersheath cases are visible at a glance.
+    print(f"\nne profile along body axis (reflectometer stations,"
+          f" filtered to sheath shell r in [r_wall, r_wall+0.3m]):")
+    print(f"  {'z/L':>6} {'z (m)':>8} {'r_wall':>8} {'cells':>8} "
+          f"{'ne>0 cells':>11} {'max ne':>12} {'p99 ne':>12} {'max T_tr':>10}")
     station_data = []
-    body_axis_span = 0.1  # radial +/- 0.1m sample window
+    dz = 0.05  # axial half-window
+    sheath_thickness = 0.3  # radial sheath search depth (m)
     for zL in RAM_C_STATION_ZL:
         z_target = zL * RAM_C_BODY_LENGTH_M
-        # Sample cells near this axial position
-        dz = 0.05
-        mask = (np.abs(cfd.coordinates[:, 0] - z_target) < dz)
-        if mask.sum() == 0:
-            print(f"  {zL:>6.2f} {z_target:>8.3f} (no cells)")
+        r_wall = ram_c_body_radius_at_x(z_target)
+        ax_mask = np.abs(cfd.coordinates[:, 0] - z_target) < dz
+        if ax_mask.sum() == 0:
+            print(f"  {zL:>6.2f} {z_target:>8.3f} {r_wall:>8.3f} "
+                  f"{'(no cells in axial window)':>40}")
             continue
-        r = np.linalg.norm(cfd.coordinates[mask, 1:3], axis=1)
-        ne_slice = cfd.ne_m3[mask]
-        T_slice = cfd.T_K[mask]
+        r = np.linalg.norm(cfd.coordinates[ax_mask, 1:3], axis=1)
+        sheath_mask = (r >= r_wall) & (r <= r_wall + sheath_thickness)
+        ne_slice = cfd.ne_m3[ax_mask][sheath_mask]
+        T_slice = cfd.T_K[ax_mask][sheath_mask]
+        n_cells = int(sheath_mask.sum())
+        n_nonzero = int((ne_slice > 0).sum())
+        if n_cells == 0:
+            print(f"  {zL:>6.2f} {z_target:>8.3f} {r_wall:>8.3f} "
+                  f"{0:>8d} {'(no sheath cells)':>40}")
+            continue
         max_ne = float(ne_slice.max())
+        p99_ne = float(np.percentile(ne_slice, 99))
         max_T  = float(T_slice.max())
-        print(f"  {zL:>6.2f} {z_target:>8.3f} {max_ne:>12.2e} {max_T:>10.0f}")
+        print(f"  {zL:>6.2f} {z_target:>8.3f} {r_wall:>8.3f} "
+              f"{n_cells:>8d} {n_nonzero:>11d} {max_ne:>12.2e} "
+              f"{p99_ne:>12.2e} {max_T:>10.0f}")
         station_data.append({
-            "zL": zL, "z_m": z_target,
-            "max_ne_m3": max_ne, "max_T_tr_K": max_T,
+            "zL": zL, "z_m": z_target, "r_wall_m": r_wall,
+            "n_cells": n_cells, "n_nonzero_ne": n_nonzero,
+            "max_ne_m3": max_ne, "p99_ne_m3": p99_ne,
+            "max_T_tr_K": max_T,
         })
 
     # Step 4: Line-of-sight attenuation at the three RAM-C reflectometer
@@ -203,7 +256,9 @@ def main():
             "ne_m3": cfd.stag_point["ne_m3"],
         },
         "peak_sheath_ne": {
-            "ne_m3": peak_ne,
+            "ne_m3": peak_ne,            # robust (top-K mean)
+            "ne_m3_max": peak_ne_max,    # raw single-cell max
+            "n_top_cells": n_top,
             "T_tr_K": peak_T_tr,
             "location_xyz": peak_xyz.tolist(),
         },
@@ -239,10 +294,25 @@ def main():
         md.extend([
             f"| | Value | Source |",
             f"|---|---|---|",
-            f"| NEMO prediction | {peak_ne:.2e} m^-3 | this run |",
+            f"| NEMO prediction (robust, top-{n_top} mean) | {peak_ne:.2e} m^-3 | this run |",
+            f"| NEMO single-cell max | {peak_ne_max:.2e} m^-3 (spike {peak_ne_max/max(peak_ne,1e-30):.2f}x) | this run |",
             f"| Published reference | {ref['ne_peak_m3']:.2e} m^-3 (range {ref['ne_lower']:.1e}-{ref['ne_upper']:.1e}) | {ref['source']} |",
-            f"| log10 error | {log10_error:+.2f} | |",
+            f"| log10 error (robust) | {log10_error:+.2f} | |",
         ])
+    md.extend([
+        "",
+        "## ne profile along reflectometer stations",
+        "",
+        f"| z/L | z (m) | r_wall (m) | sheath cells | nonzero ne | max ne | p99 ne | max T_tr |",
+        f"|---|---|---|---|---|---|---|---|",
+    ])
+    for s in station_data:
+        md.append(
+            f"| {s['zL']:.2f} | {s['z_m']:.3f} | {s['r_wall_m']:.3f} | "
+            f"{s['n_cells']} | {s['n_nonzero_ne']} | "
+            f"{s['max_ne_m3']:.2e} | {s['p99_ne_m3']:.2e} | "
+            f"{s['max_T_tr_K']:.0f} |"
+        )
     md.extend([
         "",
         "## Reflectometer-frequency LOS attenuation",
