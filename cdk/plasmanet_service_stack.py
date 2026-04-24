@@ -12,7 +12,7 @@ Fargate always-on inference service.  Resources:
   - ALB with path-based routing: /api/plasma/* → this service, priority 10
   - CloudWatch log group with 30-day retention
 
-Outputs: ServiceUrl, EcrRepoUri, LogGroupName
+Outputs: ServiceUrl, EcrRepoUri, LogGroupName, ModelSsmParam
 
 See docs/SIMOPS_INTEGRATION.md §2 (Layer A) and §6 (CDK changes table).
 """
@@ -26,6 +26,7 @@ from aws_cdk import (
     aws_elasticloadbalancingv2 as elbv2,
     aws_iam as iam,
     aws_logs as logs,
+    aws_ssm as ssm,
 )
 from constructs import Construct
 
@@ -109,8 +110,23 @@ class PlasmaNetServiceStack(cdk.Stack):
             removal_policy=cdk.RemovalPolicy.DESTROY,
         )
 
+        # ── SSM Parameter: model checkpoint S3 key ────────────────────────────
+        # The service reads this parameter at startup via the AWS SDK to locate
+        # the model checkpoint in S3.  Update the value and do a Fargate rolling
+        # restart to deploy a new model version without a code rebuild.
+        model_param = ssm.StringParameter(
+            self,
+            "ModelS3KeyParam",
+            parameter_name=f"/plasmanet/{env_name}/model_s3_key",
+            string_value="plasmanet/checkpoints/v0.3.0.pt",
+            description=(
+                "S3 key for the PlasmaNet model checkpoint. "
+                "Update and restart the Fargate service to load a new model."
+            ),
+            tier=ssm.ParameterTier.STANDARD,
+        )
+
         # ── Task IAM role ─────────────────────────────────────────────────────
-        # Least-privilege: only read the model checkpoint from S3.
         task_role = iam.Role(
             self,
             "TaskRole",
@@ -118,6 +134,7 @@ class PlasmaNetServiceStack(cdk.Stack):
             role_name=f"plasmanet-service-task-{env_name}",
             description="Task role for PlasmaNet Fargate inference service",
         )
+        # Read the model checkpoint from S3.
         task_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
@@ -127,6 +144,14 @@ class PlasmaNetServiceStack(cdk.Stack):
                         "arn:${AWS::Partition}:s3:::*/plasma_checkpoints/*"
                     )
                 ],
+            )
+        )
+        # Read the specific SSM parameter at startup.
+        task_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=["ssm:GetParameter"],
+                resources=[model_param.parameter_arn],
             )
         )
 
@@ -157,9 +182,9 @@ class PlasmaNetServiceStack(cdk.Stack):
             environment={
                 "PORT": "8200",
                 "ENV": env_name,
-                # Set to e.g. s3://khorium-uploads-dev/plasma_checkpoints/v1/model.pt
-                # via CDK context override or SSM Parameter in a later milestone.
-                "MODEL_S3_KEY": "",
+                # Service fetches the actual S3 key from this SSM parameter at
+                # startup via boto3.  Local dev: set MODEL_S3_KEY directly instead.
+                "MODEL_SSM_PARAM": model_param.parameter_name,
             },
             port_mappings=[ecs.PortMapping(container_port=8200)],
             health_check=ecs.HealthCheck(
@@ -262,4 +287,14 @@ class PlasmaNetServiceStack(cdk.Stack):
             value=log_group.log_group_name,
             description="CloudWatch log group for Fargate containers",
             export_name=f"PlasmaNetLogGroup-{env_name}",
+        )
+        cdk.CfnOutput(
+            self,
+            "ModelSsmParam",
+            value=model_param.parameter_name,
+            description=(
+                "SSM parameter name for the model S3 key. "
+                "Update value + restart service to deploy a new checkpoint."
+            ),
+            export_name=f"PlasmaNetModelSsmParam-{env_name}",
         )

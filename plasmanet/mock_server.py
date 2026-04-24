@@ -79,6 +79,37 @@ _REFERENCE_NE = {81.0: 2.0e18, 71.0: 1.0e19, 61.0: 2.0e19, 47.0: 2.0e19}
 # Default aspect angles matching the frontend and validation JSON.
 _DEFAULT_ANGLES = [0.0, 30.0, 60.0, 90.0, 120.0, 150.0, 180.0]
 
+
+def _resolve_model_s3_key() -> str:
+    """Return the model checkpoint S3 key.
+
+    Resolution order:
+      1. Fetch from SSM Parameter Store if MODEL_SSM_PARAM is set
+         (production — ECS task role provides ssm:GetParameter).
+      2. Fall back to MODEL_S3_KEY env var (local dev / CI).
+      3. Return empty string (mock server runs fine without a real model).
+    """
+    import os
+    param_name = os.environ.get("MODEL_SSM_PARAM", "")
+    if param_name:
+        try:
+            import boto3  # type: ignore[import]
+            client = boto3.client("ssm")
+            resp = client.get_parameter(Name=param_name)
+            key = resp["Parameter"]["Value"]
+            print(f"[mock_server] model S3 key resolved from SSM {param_name!r}: {key}")
+            return key
+        except Exception as exc:
+            print(
+                f"[mock_server] SSM fetch failed ({exc}); "
+                "falling back to MODEL_S3_KEY env var"
+            )
+    return os.environ.get("MODEL_S3_KEY", "")
+
+
+#: Resolved at import time — available to request handlers that load the model.
+MODEL_S3_KEY: str = _resolve_model_s3_key()
+
 # ── Request models ─────────────────────────────────────────────────────────────
 
 class VehicleGeometry(BaseModel):
