@@ -62,11 +62,21 @@ TAGS: dict[str, str] = {
     "repo": "yardeli/plasmanet",
 }
 
+# Bucket holding the trained model checkpoints.  Per SIMOPS_INTEGRATION.md §5,
+# this is the shared khorium-uploads-{env} bucket under the plasma_checkpoints/
+# prefix.  Override via context for non-standard deployments:
+#   cdk synth --context checkpoint_bucket=my-bucket
+checkpoint_bucket: str = (
+    app.node.try_get_context("checkpoint_bucket")
+    or f"khorium-uploads-{env_name}"
+)
+
 # ── Layer A ────────────────────────────────────────────────────────────────────
 service_stack = PlasmaNetServiceStack(
     app,
     f"PlasmaNetServiceStack-{env_name}",
     env_name=env_name,
+    checkpoint_bucket_name=checkpoint_bucket,
     env=aws_env,
     description=(
         "PlasmaNet Fargate always-on inference service (Layer A) "

@@ -45,8 +45,22 @@ class PlasmaNetServiceStack(cdk.Stack):
         construct_id: str,
         *,
         env_name: str,
+        checkpoint_bucket_name: str,
+        checkpoint_prefix: str = "plasma_checkpoints/",
         **kwargs,
     ) -> None:
+        """
+        Parameters
+        ----------
+        env_name
+            Deployment environment ("dev", "staging", "prod").
+        checkpoint_bucket_name
+            S3 bucket holding model checkpoints. The task role is granted
+            s3:GetObject scoped exactly to {bucket}/{prefix}*.
+        checkpoint_prefix
+            Prefix within the checkpoint bucket. Default: "plasma_checkpoints/"
+            — matches the SIMOPS_INTEGRATION.md §5 layout.
+        """
         super().__init__(scope, construct_id, **kwargs)
 
         # ── ECR ──────────────────────────────────────────────────────────────
@@ -134,16 +148,17 @@ class PlasmaNetServiceStack(cdk.Stack):
             role_name=f"plasmanet-service-task-{env_name}",
             description="Task role for PlasmaNet Fargate inference service",
         )
-        # Read the model checkpoint from S3.
+        # Read the model checkpoint from S3.  Scoped precisely to the bucket
+        # + prefix passed in by the CDK app — no wildcard bucket name.
+        checkpoint_arn = (
+            f"arn:${{AWS::Partition}}:s3:::"
+            f"{checkpoint_bucket_name}/{checkpoint_prefix}*"
+        )
         task_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=["s3:GetObject"],
-                resources=[
-                    cdk.Fn.sub(
-                        "arn:${AWS::Partition}:s3:::*/plasma_checkpoints/*"
-                    )
-                ],
+                resources=[cdk.Fn.sub(checkpoint_arn)],
             )
         )
         # Read the specific SSM parameter at startup.

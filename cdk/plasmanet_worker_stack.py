@@ -96,7 +96,7 @@ class PlasmaNetWorkerStack(cdk.Stack):
         )
 
         # ── IAM: worker job role ──────────────────────────────────────────────
-        # Least privilege: only Get/Put on the simulation bucket.
+        # Used by the *running container* — least-privilege: S3 only.
         worker_job_role = iam.Role(
             self,
             "WorkerJobRole",
@@ -117,6 +117,27 @@ class PlasmaNetWorkerStack(cdk.Stack):
                 actions=["s3:ListBucket"],
                 resources=[simulation_bucket.bucket_arn],
             )
+        )
+
+        # ── IAM: execution role ───────────────────────────────────────────────
+        # Used by the ECS agent *before* the container starts — pulls the image
+        # from ECR and writes container stdout/stderr to CloudWatch Logs.
+        # See https://docs.aws.amazon.com/batch/latest/userguide/execution-IAM-role.html
+        # — must be distinct from the job role (which is for the container itself).
+        execution_role = iam.Role(
+            self,
+            "WorkerExecutionRole",
+            assumed_by=iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
+            role_name=f"plasmanet-worker-exec-{env_name}",
+            description=(
+                "Batch execution role for SU2-NEMO worker — ECR image pull "
+                "and CloudWatch Logs write."
+            ),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name(
+                    "service-role/AmazonECSTaskExecutionRolePolicy"
+                ),
+            ],
         )
 
         # ── IAM: EC2 instance role + profile for Batch compute environment ────
@@ -236,7 +257,7 @@ class PlasmaNetWorkerStack(cdk.Stack):
                     "", [ecr_repo.repository_uri, ":plasmanet-worker"]
                 ),
                 job_role_arn=worker_job_role.role_arn,
-                execution_role_arn=worker_job_role.role_arn,
+                execution_role_arn=execution_role.role_arn,
                 resource_requirements=[
                     batch.CfnJobDefinition.ResourceRequirementProperty(
                         type="VCPU", value="16"

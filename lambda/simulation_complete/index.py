@@ -3,6 +3,18 @@
 Triggered by EventBridge on Batch Job State Change (SUCCEEDED | FAILED).
 Uses stdlib only (urllib.request) — no external dependencies.
 
+Caller contract
+---------------
+**Whoever calls batch.submitJob() MUST set jobName = simulation_id (UUID).**
+
+Batch generates an internal jobId (also a UUID) but the only human-meaningful
+identifier in the job-state-change event is jobName, which round-trips back
+to KhoriumBackend's plasma_analyses.id. Without this contract the webhook has
+no way to correlate the completed Batch job with its originating analysis row
+short of a `batch:DescribeJobs` lookup (extra IAM, extra latency, extra failure
+mode). KhoriumBackend's submit_cfd handler should pass the analysis UUID as
+both simulation_id and jobName.
+
 Environment variables
 ---------------------
 KHORIUM_BACKEND_URL   Base URL of KhoriumBackend, e.g. https://api.khorium.ai.

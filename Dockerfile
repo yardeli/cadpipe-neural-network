@@ -25,8 +25,15 @@ FROM python:3.11-slim AS builder
 WORKDIR /build
 
 # Install build-time deps into a prefix so the runtime stage gets a clean copy.
+# boto3 is required by mock_server._resolve_model_s3_key() to fetch the model
+# checkpoint S3 key from SSM Parameter Store at startup. Without it the
+# resolver silently falls back to the MODEL_S3_KEY env var.
 COPY pyproject.toml .
-RUN pip install --no-cache-dir --prefix=/deps fastapi "uvicorn[standard]" pydantic
+RUN pip install --no-cache-dir --prefix=/deps \
+        fastapi \
+        "uvicorn[standard]" \
+        pydantic \
+        "boto3>=1.34,<2"
 
 # ── Stage 2: service runtime ──────────────────────────────────────────────────
 FROM python:3.11-slim AS service
