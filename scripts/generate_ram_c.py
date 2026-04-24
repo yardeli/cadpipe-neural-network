@@ -151,10 +151,20 @@ def main():
                     help="mesh size at body surface (mm). Mach 22 shock ~3 mm thick.")
     ap.add_argument("--far-field-mm", type=float, default=200.0,
                     help="mesh size at farfield (mm). Coarse since no physics there.")
-    ap.add_argument("--refine-radius-m", type=float, default=0.6,
-                    help="distance from body over which size transitions from near→far.")
+    ap.add_argument("--refine-radius-m", type=float, default=5.0,
+                    help="distance from body over which size transitions from near→far. "
+                         "Must be LARGE (5+ m) so growth rate per layer stays below "
+                         "~1.2× — NEMO 2-T solver rejects abrupt size jumps.")
     ap.add_argument("--domain-factor", type=float, default=6.0,
                     help="farfield radius / body length. Default 6.")
+    ap.add_argument("--uniform", action="store_true",
+                    help="Use uniform-size mesher (same as blunt_cone). "
+                         "Drops the size-field transition that caused "
+                         "convergence problems at Mach 22.")
+    ap.add_argument("--uniform-size-mm", type=float, default=100.0,
+                    help="Uniform mesh size when --uniform is set. "
+                         "Default 100 mm = same ballpark as blunt_cone mesh "
+                         "scaled up for larger body.")
     ap.add_argument("--gas-model", default="AIR-5",
                     help="AIR-5 (built-in) or air_11 (Mutation++, slower)")
     args = ap.parse_args()
@@ -190,6 +200,14 @@ def main():
     mesh_su2 = output_dir / f"{RAM_C_GEOMETRY['name']}_domain.su2"
     if mesh_su2.exists():
         print(f"  Mesh already exists: {mesh_su2.name}")
+    elif args.uniform:
+        # Use plasmanet.generate_geometries.mesh_domain — uniform sizing,
+        # same approach that worked for blunt_cone.
+        from plasmanet.generate_geometries import mesh_domain
+        print(f"\nMeshing uniformly with char_length_mm={args.uniform_size_mm}")
+        mesh_domain(str(domain_step),
+                    char_length_mm=args.uniform_size_mm,
+                    output_format="su2")
     else:
         print(f"\nMeshing with size field: near={args.near_body_mm}mm, "
               f"far={args.far_field_mm}mm, R_refine={args.refine_radius_m}m")

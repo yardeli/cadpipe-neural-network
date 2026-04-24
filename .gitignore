@@ -14,6 +14,19 @@ data/cfd_cases/**/*.su2
 data/cfd_cases/**/*.msh
 data/cfd_results/
 
+# NEMO case meshes and CFD outputs (large, regeneratable)
+# Commit cfg files, .step geometry, and select small meshes only.
+data/cfd_cases_nemo/**/ram_c_domain.su2
+data/cfd_cases_nemo/**/ram_c_domain.cgns
+data/cfd_cases_nemo/**/ram_c_domain_raw.su2
+data/cfd_cases_nemo/**/ram_c_meshio.su2
+data/cfd_cases_nemo/**/solution.dat
+data/cfd_cases_nemo/**/restart.dat
+data/cfd_cases_nemo/**/flow.vtu
+data/cfd_cases_nemo/**/su2.log
+data/cfd_cases_nemo/**/history.csv
+data/cfd_cases_nemo/**/mesh.cas
+
 # Model checkpoints (large, regeneratable)
 checkpoints/*.pt
 
