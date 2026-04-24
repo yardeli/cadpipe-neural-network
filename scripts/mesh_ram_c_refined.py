@@ -72,25 +72,29 @@ def main():
     df = gmsh.model.mesh.field.add("Distance")
     gmsh.model.mesh.field.setNumbers(df, "FacesList", body_tags)
 
+    # Sizing: 2026-04-24 pass #2 after first 4.5M-tet mesh was too slow for
+    # single-threaded SU2-NEMO preprocessing (>33 min in connectivity setup).
+    # Coarser targets give ~1.2-1.5M tets while keeping ~4x more body
+    # resolution than the 63k first-pass mesh.
     inner = gmsh.model.mesh.field.add("Threshold")
     gmsh.model.mesh.field.setNumber(inner, "InField", df)
-    gmsh.model.mesh.field.setNumber(inner, "SizeMin", 0.004)
-    gmsh.model.mesh.field.setNumber(inner, "SizeMax", 0.015)
+    gmsh.model.mesh.field.setNumber(inner, "SizeMin", 0.006)   # 6mm at body wall
+    gmsh.model.mesh.field.setNumber(inner, "SizeMax", 0.020)   # 20mm at 50mm out
     gmsh.model.mesh.field.setNumber(inner, "DistMin", 0.0)
     gmsh.model.mesh.field.setNumber(inner, "DistMax", 0.05)
     gmsh.model.mesh.field.setNumber(inner, "StopAtDistMax", 1)
 
     mid = gmsh.model.mesh.field.add("Threshold")
     gmsh.model.mesh.field.setNumber(mid, "InField", df)
-    gmsh.model.mesh.field.setNumber(mid, "SizeMin", 0.015)
-    gmsh.model.mesh.field.setNumber(mid, "SizeMax", 0.05)
+    gmsh.model.mesh.field.setNumber(mid, "SizeMin", 0.020)
+    gmsh.model.mesh.field.setNumber(mid, "SizeMax", 0.070)     # 70mm at 500mm
     gmsh.model.mesh.field.setNumber(mid, "DistMin", 0.05)
     gmsh.model.mesh.field.setNumber(mid, "DistMax", 0.5)
     gmsh.model.mesh.field.setNumber(mid, "StopAtDistMax", 1)
 
     outer = gmsh.model.mesh.field.add("Threshold")
     gmsh.model.mesh.field.setNumber(outer, "InField", df)
-    gmsh.model.mesh.field.setNumber(outer, "SizeMin", 0.05)
+    gmsh.model.mesh.field.setNumber(outer, "SizeMin", 0.070)
     gmsh.model.mesh.field.setNumber(outer, "SizeMax", 0.2)
     gmsh.model.mesh.field.setNumber(outer, "DistMin", 0.5)
     gmsh.model.mesh.field.setNumber(outer, "DistMax", 5.0)
