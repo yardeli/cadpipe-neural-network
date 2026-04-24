@@ -1,13 +1,13 @@
 #!/bin/bash
-# Mach-ramp on the REFINED 4.5M-tet RAM-C mesh.
+# RECOVERY SCRIPT: resume the refined-mesh ramp from M15 onwards.
 #
-# Same chain as ram_c_ramp_stages.sh (M10 cold-start -> M15 -> M18 -> M22.5)
-# but on the body-clustered mesh that resolves the sheath properly.
-# Targets: 4mm at body wall, 15mm at 50mm out, 50mm at 500mm out, 200mm
-# at 5m out. Should improve peak-ne accuracy from log10 err +1.51 to <0.5.
+# Used because the original ram_c_refined_ramp.sh had a typo in the
+# stage 2 prev_dir argument ("M10_A61" instead of "M10_0_A61"), causing
+# the chain to break right after M10 completed cleanly. M10 produced a
+# valid restart.dat at /home/yarden/ram_c_runs/ramC_refined_M10_0_A61/
+# (84 MB, exit=0, Rho_0=-4.18). This script picks up M15 -> M18 -> M22.5.
 #
-# Iteration counts are chosen to give ~3-4 hours total runtime on
-# c2d-highcpu-16 with 4.5M tets (~7s/iter for NEMO 2-T BCGSTAB).
+# Original script has been fixed; this is one-shot for the in-flight run.
 
 set -e
 
@@ -19,7 +19,6 @@ export LD_LIBRARY_PATH=/opt/su2-nemo/lib:$LD_LIBRARY_PATH
 export MPP_DATA_DIRECTORY=/opt/su2-nemo/mpp-data
 export OMP_NUM_THREADS=16
 
-# Freestream @ 61 km
 P_INF=253.7116
 T_INF=242.6500
 
@@ -81,8 +80,7 @@ run_stage() {
     local stage_dir="${RUNS}/ramC_refined_M${mach/./_}_A61"
     mkdir -p "$stage_dir"
 
-    # Copy mesh from M10 dir (where we uploaded it)
-    [ -f "$stage_dir/$MESH" ] || cp "${RUNS}/ramC_refined_M10_A61/$MESH" "$stage_dir/"
+    [ -f "$stage_dir/$MESH" ] || cp "${RUNS}/ramC_refined_M10_0_A61/$MESH" "$stage_dir/"
 
     if [ "$restart" = "YES" ]; then
         if [ -f "$prev_dir/restart.dat" ]; then
@@ -113,19 +111,12 @@ run_stage() {
     echo ""
 }
 
-# Stage 1: M10 cold-start
-run_stage 10.0 400 NO ""
-
-# Stage 2: M15 from M10 restart
+# Resume from M15 (M10 already done at /home/yarden/ram_c_runs/ramC_refined_M10_0_A61)
 run_stage 15.0 300 YES "${RUNS}/ramC_refined_M10_0_A61"
-
-# Stage 3: M18 from M15 restart
 run_stage 18.0 300 YES "${RUNS}/ramC_refined_M15_0_A61"
-
-# Stage 4: M22.5 from M18 restart
 run_stage 22.5 600 YES "${RUNS}/ramC_refined_M18_0_A61"
 
 echo "======================================================"
-echo "  Refined-mesh ramp complete. Final M22.5 flow.vtu at:"
+echo "  Refined-mesh ramp resume complete. M22.5 flow.vtu at:"
 echo "    ${RUNS}/ramC_refined_M22_5_A61/flow.vtu"
 echo "======================================================"
