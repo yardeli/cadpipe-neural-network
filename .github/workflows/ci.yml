@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# Cancel any in-flight runs for the same branch/PR when a new push lands.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job 1: cdk synth — validates the CloudFormation templates
+  # ──────────────────────────────────────────────────────────────────────────
+  cdk-synth:
+    name: cdk synth
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install CDK Python libraries
+        run: pip install --no-cache-dir aws-cdk-lib constructs
+
+      - name: Install CDK CLI
+        run: npm install -g aws-cdk
+
+      - name: cdk synth — fail on warnings or errors
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Capture stdout + stderr so we can scan for [WARNING]/[ERROR] lines.
+          # cdk exits non-zero on hard CFN errors; we additionally fail on
+          # any [WARNING] line (e.g. deprecated APIs, feature-flag drift).
+          output="$(cdk synth --app "python cdk/app.py" 2>&1)"
+          echo "$output"
+          if printf '%s\n' "$output" | grep -qE '^\[(WARNING|ERROR)\]'; then
+            echo "::error::cdk synth emitted [WARNING] or [ERROR] log lines"
+            exit 1
+          fi
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job 2: pytest — mock_server contract tests only
+  # ──────────────────────────────────────────────────────────────────────────
+  # Heavy tests under tests/ (test_physics.py, test_cfd_field.py, test_e2e.py,
+  # etc.) require Cantera, VTK, gmsh, or CFD output data and are excluded.
+  # ──────────────────────────────────────────────────────────────────────────
+  pytest:
+    name: pytest (mock_server contract)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: |
+          pip install --no-cache-dir \
+            fastapi \
+            uvicorn \
+            pydantic \
+            boto3 \
+            httpx \
+            pytest
+
+      - name: Run mock_server contract tests
+        run: pytest tests/test_mock_server_contract.py -v
