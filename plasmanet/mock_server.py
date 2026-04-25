@@ -589,6 +589,85 @@ def _build_benchmark() -> RamCBenchmarkResponse:
     )
 
 
+def _compute_scan_data(req: "MultiFreqScanRequest") -> dict:
+    """Build the LOSData-shaped dict served by /analyze_scan and used by /report.
+
+    Single source of truth for the multi-band scan response — both routes
+    consume this dict so the polar chart and station profile stay consistent
+    between the JSON endpoint and the PDF artifact.
+    """
+    angles = req.aspect_angles_deg or _DEFAULT_ANGLES
+    analyze_req = PlasmaAnalyzeRequest(
+        vehicle=req.vehicle,
+        flight=req.flight,
+        radar=RadarParams(aspect_angles_deg=angles),
+        uncertainty=req.uncertainty,
+    )
+
+    frequencies: list[dict] = []
+    ku_p05: list[dict] = []
+    ku_p95: list[dict] = []
+
+    for band in _FREQ_BANDS:
+        resp = _predict(analyze_req, freq_hz=band["frequency_hz"])
+        frequencies.append({
+            "label": band["label"],
+            "frequency_mhz": band["frequency_mhz"],
+            "color": band["color"],
+            "aspect_scan": [
+                {"angle_deg": a.angle_deg,
+                 "attenuation_db": a.attenuation_db,
+                 "status": a.status}
+                for a in resp.aspect_scan
+            ],
+        })
+        if band["frequency_mhz"] == 12000 and resp.uq:
+            uq = resp.uq
+            for a in resp.aspect_scan:
+                scale_lo = (uq.ne_P05_m3 / max(uq.ne_P50_m3, 1.0)) ** 0.5
+                scale_hi = (uq.ne_P95_m3 / max(uq.ne_P50_m3, 1.0)) ** 0.5
+                ku_p05.append({"angle_deg": a.angle_deg,
+                               "attenuation_db": round(a.attenuation_db * scale_lo, 3)})
+                ku_p95.append({"angle_deg": a.angle_deg,
+                               "attenuation_db": round(a.attenuation_db * scale_hi, 3)})
+
+    ku_resp = _predict(analyze_req, freq_hz=12e9)
+    stag = ku_resp.stagnation
+
+    station_profile = _build_station_profile(req, stag.ne_m3, stag.T_tr_K)
+
+    uq_band = None
+    if ku_resp.uq and ku_p05:
+        uq_band = {
+            "frequency_mhz": 12000,
+            "label": "Ku-band 12 GHz (P05–P95)",
+            "aspect_scan_p05": ku_p05,
+            "aspect_scan_p95": ku_p95,
+        }
+
+    return {
+        "meta": {
+            "mach": req.flight.mach,
+            "altitude_km": req.flight.altitude_km,
+            "nose_radius_m": req.vehicle.nose_radius_m,
+            "vehicle": req.vehicle.name,
+            "engine": ku_resp.engine,
+            "plasmanet_version": PLASMANET_VERSION,
+            "stagnation": {
+                "T_tr_K": stag.T_tr_K,
+                "T_ve_K": stag.T_ve_K,
+                "p_Pa": stag.p_Pa,
+                "ne_m3": stag.ne_m3,
+                "fp_GHz": stag.fp_GHz,
+            },
+            "uq": ku_resp.uq.model_dump() if ku_resp.uq else None,
+            "station_profile": station_profile,
+        },
+        "frequencies": frequencies,
+        "uq_band": uq_band,
+    }
+
+
 # ── FastAPI app factory ────────────────────────────────────────────────────────
 
 def create_app() -> "FastAPI":
@@ -671,81 +750,51 @@ def create_app() -> "FastAPI":
         Calls /analyze internally for each of the four standard radar bands
         (VHF 225/450 MHz, X-band 9.2 GHz, Ku-band 12 GHz).
         """
-        angles = req.aspect_angles_deg or _DEFAULT_ANGLES
-        analyze_req = PlasmaAnalyzeRequest(
+        return _compute_scan_data(req)
+
+    # ── Route 1c: POST /api/plasma/report — one-page A4 PDF ──────────────────
+    #
+    # Same request shape as /api/plasma/analyze (PlasmaAnalyzeRequest), but
+    # internally runs the multi-band scan to populate the polar chart.
+    # Returns Content-Type: application/pdf, streamed inline.
+
+    @app.post("/api/plasma/report")
+    async def plasma_report(req: PlasmaAnalyzeRequest):
+        """One-page A4 detectability report PDF.
+
+        Stand-alone artifact for SBIR review and async sharing — bundles the
+        polar attenuation chart, station n_e profile, stagnation summary,
+        per-band detection table, UQ band, and footer with references.
+        """
+        from fastapi.responses import Response
+        from .pdf_report import build_pdf
+
+        scan_req = MultiFreqScanRequest(
             vehicle=req.vehicle,
             flight=req.flight,
-            radar=RadarParams(aspect_angles_deg=angles),
+            aspect_angles_deg=req.radar.aspect_angles_deg,
             uncertainty=req.uncertainty,
         )
+        scan = _compute_scan_data(scan_req)
 
-        frequencies = []
-        ku_p05: list[dict] = []
-        ku_p95: list[dict] = []
-
-        for band in _FREQ_BANDS:
-            resp = _predict(analyze_req, freq_hz=band["frequency_hz"])
-            frequencies.append({
-                "label": band["label"],
-                "frequency_mhz": band["frequency_mhz"],
-                "color": band["color"],
-                "aspect_scan": [
-                    {"angle_deg": a.angle_deg, "attenuation_db": a.attenuation_db, "status": a.status}
-                    for a in resp.aspect_scan
-                ],
-            })
-            # Capture UQ band for Ku-band (last freq)
-            if band["frequency_mhz"] == 12000 and resp.uq:
-                uq = resp.uq
-                for a in resp.aspect_scan:
-                    # Scale P05/P95 attenuation from median proportionally
-                    scale_lo = (uq.ne_P05_m3 / max(uq.ne_P50_m3, 1.0)) ** 0.5
-                    scale_hi = (uq.ne_P95_m3 / max(uq.ne_P50_m3, 1.0)) ** 0.5
-                    ku_p05.append({"angle_deg": a.angle_deg,
-                                   "attenuation_db": round(a.attenuation_db * scale_lo, 3)})
-                    ku_p95.append({"angle_deg": a.angle_deg,
-                                   "attenuation_db": round(a.attenuation_db * scale_hi, 3)})
-
-        # Use the Ku-band response for stagnation reporting
-        ku_resp = _predict(analyze_req, freq_hz=12e9)
-        stag = ku_resp.stagnation
-
-        # Build a station profile for the second chart on the frontend.
-        # Uses the validation JSON's reflectometer-station results when the
-        # flight condition matches the NEMO run; otherwise scales the same
-        # zL grid by the stagnation ne for a plausible synthetic shape.
-        station_profile = _build_station_profile(req, stag.ne_m3, stag.T_tr_K)
-
-        uq_band = None
-        if ku_resp.uq and ku_p05:
-            uq_band = {
-                "frequency_mhz": 12000,
-                "label": "Ku-band 12 GHz (P05–P95)",
-                "aspect_scan_p05": ku_p05,
-                "aspect_scan_p95": ku_p95,
-            }
-
-        return {
-            "meta": {
-                "mach": req.flight.mach,
-                "altitude_km": req.flight.altitude_km,
-                "nose_radius_m": req.vehicle.nose_radius_m,
-                "vehicle": req.vehicle.name,
-                "engine": ku_resp.engine,
-                "plasmanet_version": PLASMANET_VERSION,
-                "stagnation": {
-                    "T_tr_K": stag.T_tr_K,
-                    "T_ve_K": stag.T_ve_K,
-                    "p_Pa": stag.p_Pa,
-                    "ne_m3": stag.ne_m3,
-                    "fp_GHz": stag.fp_GHz,
-                },
-                "uq": ku_resp.uq.model_dump() if ku_resp.uq else None,
-                "station_profile": station_profile,
+        pdf_bytes = build_pdf(
+            meta=scan["meta"],
+            frequencies=scan["frequencies"],
+            station_profile=scan["meta"].get("station_profile"),
+            benchmark_log10_error=None,
+        )
+        filename = (
+            f"plasmanet_M{req.flight.mach:.1f}_"
+            f"{req.flight.altitude_km:.0f}km.pdf"
+        )
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'inline; filename="{filename}"',
+                "Cache-Control": "no-store",
             },
-            "frequencies": frequencies,
-            "uq_band": uq_band,
-        }
+        )
 
     # ── Route 2: POST /api/plasma/submit_cfd ─────────────────────────────────
     #
