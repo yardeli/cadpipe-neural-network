@@ -99,11 +99,16 @@ CONV_STARTITER= 500
 
 MESH_FILENAME= $MESH
 MESH_FORMAT= SU2
+% Solution filename: when restart is the converted AIR-5 ASCII, file is
+% solution.csv (ASCII format). SU2 reads ASCII restarts when OUTPUT_FILES
+% includes RESTART_ASCII or when filename has .csv extension.
+SOLUTION_FILENAME= solution.csv
 CONV_FILENAME= history
 VOLUME_FILENAME= flow
 RESTART_FILENAME= restart
 OUTPUT_WRT_FREQ= 500
-OUTPUT_FILES= (RESTART, PARAVIEW)
+% Write both ASCII (for next-stage chain) AND binary (compact) plus VTU.
+OUTPUT_FILES= (RESTART_ASCII, RESTART, PARAVIEW)
 EOF
 }
 
@@ -118,10 +123,28 @@ run_stage() {
     [ -f "$stage_dir/$MESH" ] || cp "${RUNS}/ramC_refined_M10_A61/$MESH" "$stage_dir/"
 
     if [ "$restart" = "YES" ]; then
-        if [ -f "$prev_dir/restart.dat" ]; then
+        # Two restart sources, in order:
+        #   1. Previous stage's restart.csv (ASCII) — preferred
+        #   2. Previous stage's restart.dat (binary) — fallback
+        # First M10 stage uses the AIR-5-to-AIR-11 converted restart at
+        # the special path /home/yarden/ram_c_runs/ramC_refined_M10_0_A61_ascii/
+        # restart_air11.csv (produced by scripts/convert_air5_to_air11_restart.py).
+        if [ "$prev_dir" = "CONVERTED_AIR5" ]; then
+            local converted=/home/yarden/ram_c_runs/ramC_refined_M10_0_A61_ascii/restart_air11.csv
+            if [ ! -f "$converted" ]; then
+                echo "ERROR: AIR-5->AIR-11 converted restart missing: $converted"
+                echo "       Run: bash regen_m10_ascii_restart.sh"
+                echo "       Then: python3 convert_air5_to_air11_restart.py --input ..."
+                exit 1
+            fi
+            cp "$converted" "$stage_dir/solution.csv"
+            echo "Using AIR-5->AIR-11 converted restart for M=$mach"
+        elif [ -f "$prev_dir/restart.csv" ]; then
+            cp "$prev_dir/restart.csv" "$stage_dir/solution.csv"
+        elif [ -f "$prev_dir/restart.dat" ]; then
             cp "$prev_dir/restart.dat" "$stage_dir/solution.dat"
         else
-            echo "ERROR: no restart.dat in $prev_dir"
+            echo "ERROR: no restart in $prev_dir"
             exit 1
         fi
     fi
@@ -146,11 +169,12 @@ run_stage() {
     echo ""
 }
 
-# Iteration counts are higher than AIR-5 because EULER_EXPLICIT converges
-# ~10x slower per iter (but each iter is cheaper). Use restart.dat from
-# the AIR-5 ramp if available to warm-start.
-# Stage 1: M10 cold-start (can also seed from AIR-5 M10 restart if desired)
-run_stage 10.0 3000 NO ""
+# NEW STRATEGY (after 3 cold-start failures): start M10 from a converted
+# AIR-5 -> AIR-11 restart instead of pure-neutral freestream. Bow shock is
+# already formed and chemistry has equilibrated; AIR-11 just needs to
+# evolve the trace ions (1e-9 seed) toward physical equilibrium values.
+# This sidesteps the chemistry NaN that hit attempts 1-3.
+run_stage 10.0 1500 YES CONVERTED_AIR5
 
 run_stage 15.0 2000 YES "${RUNS}/ramC_refined_air11_M10_0_A61"
 run_stage 18.0 2000 YES "${RUNS}/ramC_refined_air11_M15_0_A61"
