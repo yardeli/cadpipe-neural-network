@@ -2,14 +2,19 @@
 
 Exercises the simulation_id resolver added in efa515e:
 
-  (a) UUID jobName            → fast path; zero AWS calls
-  (b) Non-UUID + parameters   → DescribeJobs fallback finds simulation_id
-  (c) Non-UUID + no metadata  → fallback returns None; webhook posts null
+  (a) UUID jobName             → fast path; zero AWS calls
+  (b) Non-UUID + parameters    → DescribeJobs fallback finds simulation_id
+  (c) Non-UUID + no metadata   → fallback returns None; webhook posts null
+  (d) Non-UUID + tags          → fallback finds simulation_id in tags
+  (e) DescribeJobs raises      → graceful → simulation_id=null, status 200
+  (f) Missing jobId in detail  → early return; zero AWS calls
 
 Mocks
 -----
 moto.mock_aws         Blocks all real AWS API calls. Used to stand up a
-                      minimal Batch environment for tests (b) and (c).
+                      minimal Batch environment for tests (b)/(c)/(d).
+                      Skipped for (e)/(f) — those test paths that don't
+                      need a real Batch backend.
 boto3.client tracker  Wraps boto3.client at runtime to (1) log which
                       services the Lambda touches and (2) reject any
                       service other than "batch" — Lambda must not call
@@ -99,7 +104,8 @@ def _captured_post_body(webhook_server) -> dict:
 
 
 def _setup_batch_and_submit_job(*, region: str, job_name: str,
-                                parameters: dict | None) -> str:
+                                parameters: dict | None,
+                                tags: dict | None = None) -> str:
     """Bootstrap minimal Batch infra in moto, submit one job, return its jobId.
 
     Returns the moto-assigned jobId so the test can pass it through the
@@ -178,6 +184,8 @@ def _setup_batch_and_submit_job(*, region: str, job_name: str,
     )
     if parameters:
         submit_kwargs["parameters"] = parameters
+    if tags:
+        submit_kwargs["tags"] = tags
     return batch.submit_job(**submit_kwargs)["jobId"]
 
 
@@ -275,3 +283,113 @@ def test_non_uuid_jobname_no_metadata_posts_null(
     assert body["reason"] == "Spot interrupted"
     assert body["batch_job_id"] == job_id
     assert boto3_calls == ["batch"], f"unexpected AWS calls: {boto3_calls!r}"
+
+
+# ── (d) Non-UUID jobName + tags[simulation_id] → tag fallback ────────────────
+
+@mock_aws
+def test_tags_fallback_path(
+    monkeypatch, lambda_handler, webhook_env, webhook_server
+):
+    sim_id = str(uuid_lib.uuid4())
+    job_id = _setup_batch_and_submit_job(
+        region="us-east-1",
+        job_name="submit-tagged-789",
+        parameters=None,                              # nothing in parameters
+        tags={"simulation_id": sim_id, "env": "dev"}, # only in tags
+    )
+
+    boto3_calls = _install_boto3_tracker(monkeypatch)
+
+    event = {
+        "detail": {
+            "jobName": "submit-tagged-789",
+            "jobId": job_id,
+            "status": "SUCCEEDED",
+            "statusReason": "OK",
+        }
+    }
+    result = lambda_handler(event, None)
+
+    assert result["statusCode"] == 200
+    body = _captured_post_body(webhook_server)
+    assert body["simulation_id"] == sim_id
+    assert boto3_calls == ["batch"], f"unexpected AWS calls: {boto3_calls!r}"
+
+
+# ── (e) DescribeJobs raises → webhook still fires with simulation_id=null ────
+
+def test_describe_jobs_exception(
+    monkeypatch, lambda_handler, webhook_env, webhook_server
+):
+    """boto3 client is mocked directly — no moto bootstrap needed; the goal is
+    to exercise the except-branch in _resolve_simulation_id deterministically.
+    """
+    from unittest.mock import MagicMock
+    from botocore.exceptions import ClientError
+
+    boto3_calls: list[str] = []
+    mock_batch = MagicMock()
+    mock_batch.describe_jobs.side_effect = ClientError(
+        error_response={
+            "Error": {"Code": "ServiceUnavailable", "Message": "Batch is down"}
+        },
+        operation_name="DescribeJobs",
+    )
+
+    def fake_client(service: str, *args, **kwargs):
+        boto3_calls.append(service)
+        if service in ("s3", "ssm"):
+            raise AssertionError(
+                f"Lambda must not touch {service!r} — only 'batch' is allowed"
+            )
+        return mock_batch
+
+    monkeypatch.setattr(boto3, "client", fake_client)
+
+    event = {
+        "detail": {
+            "jobName": "submit-broken-aws",
+            "jobId": "fake-job-id-12345",
+            "status": "FAILED",
+            "statusReason": "Spot interrupted",
+        }
+    }
+    result = lambda_handler(event, None)
+
+    # Webhook still fires — Lambda is robust to AWS-side failures.
+    assert result["statusCode"] == 200
+    body = _captured_post_body(webhook_server)
+    assert body["simulation_id"] is None
+    assert body["status"] == "FAILED"
+    assert body["reason"] == "Spot interrupted"
+    assert body["batch_job_id"] == "fake-job-id-12345"
+    # Lambda did call DescribeJobs once before the exception was raised.
+    mock_batch.describe_jobs.assert_called_once_with(jobs=["fake-job-id-12345"])
+    assert boto3_calls == ["batch"]
+
+
+# ── (f) Missing jobId → early return; zero AWS calls ─────────────────────────
+
+def test_missing_jobid_in_detail(
+    monkeypatch, lambda_handler, webhook_env, webhook_server
+):
+    """No jobId in event detail → resolver bails before any AWS call."""
+    boto3_calls = _install_boto3_tracker(monkeypatch)
+
+    event = {
+        "detail": {
+            "jobName": "submit-no-jobid",
+            # jobId deliberately omitted
+            "status": "SUCCEEDED",
+            "statusReason": "OK",
+        }
+    }
+    result = lambda_handler(event, None)
+
+    assert result["statusCode"] == 200
+    body = _captured_post_body(webhook_server)
+    assert body["simulation_id"] is None
+    assert body["batch_job_id"] is None      # detail.get("jobId") → None
+    assert body["status"] == "SUCCEEDED"
+    assert boto3_calls == [], f"unexpected AWS calls: {boto3_calls!r}"
