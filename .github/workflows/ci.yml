@@ -10,13 +10,22 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Least-privilege GITHUB_TOKEN — none of these jobs write to the repo,
+# create checks, comment on PRs, or publish packages. Default for the
+# token is read+write; we never need write.
+permissions:
+  contents: read
+
 jobs:
   # ──────────────────────────────────────────────────────────────────────────
   # Job 1: cdk synth — validates the CloudFormation templates
   # ──────────────────────────────────────────────────────────────────────────
   cdk-synth:
     name: cdk synth
-    runs-on: ubuntu-latest
+    # Pinned (not ubuntu-latest) so a silent runner image bump doesn't
+    # surprise CI; bump intentionally when we want to.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -24,9 +33,15 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
+          # No requirements.txt for CI deps — invalidate on any workflow
+          # change so dep additions land cleanly.
+          cache-dependency-path: .github/workflows/ci.yml
 
       - name: Install CDK Python libraries
-        run: pip install --no-cache-dir aws-cdk-lib constructs
+        # Soft pin: aws-cdk-lib breaks compatibility on minor releases
+        # occasionally; bump intentionally rather than on the next surprise.
+        run: pip install --no-cache-dir 'aws-cdk-lib>=2.150,<3' constructs
 
       - name: Install CDK CLI
         run: npm install -g aws-cdk
@@ -53,7 +68,8 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   pytest:
     name: pytest (mock_server contract)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -61,6 +77,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: .github/workflows/ci.yml
 
       - name: Install test dependencies
         run: |
@@ -86,7 +104,7 @@ jobs:
             tests/test_pdf_report.py \
             tests/test_agent_tools.py \
             tests/test_ram_c_trajectory.py \
-            -v
+            -v --tb=short
 
   # ──────────────────────────────────────────────────────────────────────────
   # Job 3: frontend — TypeScript build + Vitest RTL tests
@@ -97,7 +115,8 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   frontend:
     name: frontend (build + vitest)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: frontend
