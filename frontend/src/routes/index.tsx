@@ -13,8 +13,7 @@ import { LiveMockBadge, type DataSource } from "@/components/LiveMockBadge";
 import { FlightSelectors } from "@/components/FlightSelectors";
 import staticMock from "@/data/mock_los.json";
 import type { LOSData, MultiFreqScanRequest } from "@/types/los";
-
-const MOCK_SERVER = "http://localhost:8200";
+import { API_BASE_URL, ANALYZE_PATH } from "@/config";
 
 const DEFAULT_MACH = 22.5;
 const DEFAULT_ALT = 61;
@@ -53,7 +52,7 @@ export default function HomePage() {
 
     async function load() {
       try {
-        const res = await fetch(`${MOCK_SERVER}/api/plasma/analyze_scan`, {
+        const res = await fetch(`${API_BASE_URL}${ANALYZE_PATH}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(request),
@@ -254,7 +253,7 @@ export default function HomePage() {
             <>
               Live data from{" "}
               <code className="rounded bg-muted px-1">
-                POST {MOCK_SERVER}/api/plasma/analyze_scan
+                POST {API_BASE_URL}{ANALYZE_PATH}
               </code>
             </>
           ) : (

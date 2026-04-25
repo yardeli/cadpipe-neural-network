@@ -14,8 +14,7 @@ import { LiveMockBadge, type DataSource } from "@/components/LiveMockBadge";
 import { BenchmarkChart } from "@/components/BenchmarkChart";
 import staticMock from "@/data/mock_benchmark.json";
 import type { RamCBenchmarkResponse } from "@/types/los";
-
-const MOCK_SERVER = "http://localhost:8200";
+import { API_BASE_URL, BENCHMARK_PATH } from "@/config";
 
 export default function BenchmarkPage() {
   const [data, setData] = useState<RamCBenchmarkResponse>(
@@ -31,7 +30,7 @@ export default function BenchmarkPage() {
 
     async function load() {
       try {
-        const res = await fetch(`${MOCK_SERVER}/api/plasma/benchmark/ram_c`, {
+        const res = await fetch(`${API_BASE_URL}${BENCHMARK_PATH}`, {
           signal: AbortSignal.timeout(6000),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
