@@ -1,53 +1,101 @@
 import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { LOSPolarPlot } from "@/components/LOSPolarPlot";
+import { StationProfileChart } from "@/components/StationProfileChart";
 import staticMock from "@/data/mock_los.json";
 import type { LOSData, MultiFreqScanRequest } from "@/types/los";
 
 const MOCK_SERVER = "http://localhost:8200";
 
-const MOCK_REQUEST: MultiFreqScanRequest = {
-  vehicle: { nose_radius_m: 0.1524, half_angle_deg: 9.0, length_m: 1.295, name: "ram_c" },
-  flight: { mach: 22.5, altitude_km: 61.0 },
-  aspect_angles_deg: [0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180],
-};
+// RAM-C II validation grid — Jones & Cross 1972 instrumented altitudes
+// and the matching trajectory Mach numbers.
+const ALTITUDE_OPTIONS_KM = [47, 61, 71, 81] as const;
+const MACH_OPTIONS = [18.5, 22.5, 23.6, 23.9] as const;
 
-type DataSource = "loading" | "live" | "mock";
+// Default to the J&C primary validation point (M22.5 / 61 km).
+const DEFAULT_MACH = 22.5;
+const DEFAULT_ALT = 61;
+
+const RAM_C_VEHICLE = {
+  nose_radius_m: 0.1524,
+  half_angle_deg: 9.0,
+  length_m: 1.295,
+  name: "ram_c",
+} as const;
+
+const DEFAULT_ANGLES = [
+  0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180,
+] as const;
+
+type DataSource = "loading" | "live" | "mock" | "error";
 
 export default function App() {
+  const [mach, setMach] = useState<number>(DEFAULT_MACH);
+  const [alt, setAlt] = useState<number>(DEFAULT_ALT);
+
   const [data, setData] = useState<LOSData>(staticMock as unknown as LOSData);
   const [source, setSource] = useState<DataSource>("loading");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [visibleFreqs, setVisibleFreqs] = useState<number[]>([]);
   const [showUQ, setShowUQ] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
+    setSource("loading");
+    setErrorMsg(null);
+
+    const request: MultiFreqScanRequest = {
+      vehicle: { ...RAM_C_VEHICLE },
+      flight: { mach, altitude_km: alt },
+      aspect_angles_deg: [...DEFAULT_ANGLES],
+    };
+
     async function load() {
       try {
         const res = await fetch(`${MOCK_SERVER}/api/plasma/analyze_scan`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(MOCK_REQUEST),
-          signal: AbortSignal.timeout(4000),
+          body: JSON.stringify(request),
+          signal: AbortSignal.timeout(6000),
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
         const live = (await res.json()) as LOSData;
+        validateLOSData(live);
+
         if (!cancelled) {
           setData(live);
           setVisibleFreqs(live.frequencies.map((_, i) => i));
           setSource("live");
         }
-      } catch {
-        if (!cancelled) {
+      } catch (err) {
+        // Server unreachable → fall back to static mock; malformed server
+        // response → show inline error so the user sees what went wrong.
+        if (cancelled) return;
+
+        const msg = err instanceof Error ? err.message : String(err);
+        const isFetchFailure =
+          msg.includes("Failed to fetch") ||
+          msg.includes("NetworkError") ||
+          msg.includes("timeout") ||
+          msg.includes("AbortError");
+
+        if (isFetchFailure) {
           const fallback = staticMock as unknown as LOSData;
           setData(fallback);
           setVisibleFreqs(fallback.frequencies.map((_, i) => i));
           setSource("mock");
+          setErrorMsg(null);
+        } else {
+          setErrorMsg(msg);
+          setSource("error");
         }
       }
     }
     load();
-    return () => { cancelled = true; };
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [mach, alt]);
 
   function toggleFreq(i: number) {
     setVisibleFreqs((prev) =>
@@ -71,9 +119,32 @@ export default function App() {
           <SourceBadge source={source} />
         </div>
 
-        {/* Controls */}
+        {/* Flight-condition selectors */}
+        <div className="flex flex-wrap gap-4 rounded-lg border border-border bg-card p-3">
+          <SelectorRow
+            label="Mach"
+            value={mach}
+            options={MACH_OPTIONS}
+            format={(v) => v.toFixed(1)}
+            onChange={setMach}
+          />
+          <SelectorRow
+            label="Altitude"
+            value={alt}
+            options={ALTITUDE_OPTIONS_KM}
+            format={(v) => `${v} km`}
+            onChange={setAlt}
+          />
+        </div>
+
+        {/* Error state */}
+        {source === "error" && <ErrorBanner message={errorMsg} />}
+
+        {/* Frequency / UQ controls */}
         <div className="flex flex-wrap gap-3 items-center rounded-lg border border-border bg-card p-3">
-          <span className="text-xs font-medium text-muted-foreground">Frequencies:</span>
+          <span className="text-xs font-medium text-muted-foreground">
+            Frequencies:
+          </span>
           {data.frequencies.map((f, i) => (
             <button
               key={f.label}
@@ -107,14 +178,27 @@ export default function App() {
           </div>
         </div>
 
-        {/* Main chart */}
-        <LOSPolarPlot
-          data={data}
-          visibleFreqs={visibleFreqs}
-          showUQ={showUQ}
-          width={620}
-          height={380}
-        />
+        {/* Loading skeleton OR charts */}
+        {source === "loading" ? (
+          <LoadingSkeleton />
+        ) : (
+          <>
+            <LOSPolarPlot
+              data={data}
+              visibleFreqs={visibleFreqs}
+              showUQ={showUQ}
+              width={620}
+              height={380}
+            />
+            {data.meta.station_profile && data.meta.station_profile.length > 0 && (
+              <StationProfileChart
+                stations={data.meta.station_profile}
+                width={620}
+                height={240}
+              />
+            )}
+          </>
+        )}
 
         {/* Stagnation summary cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -135,7 +219,9 @@ export default function App() {
               className="rounded-lg border border-border bg-card p-3 text-center"
             >
               <div className="text-xs text-muted-foreground">{label}</div>
-              <div className="mt-1 text-sm font-semibold tabular-nums">{value}</div>
+              <div className="mt-1 text-sm font-semibold tabular-nums">
+                {value}
+              </div>
             </div>
           ))}
         </div>
@@ -163,7 +249,8 @@ export default function App() {
                 <span className="text-muted-foreground">ΔT = </span>
                 <span className="font-mono text-amber-400">
                   {(
-                    data.meta.stagnation.T_tr_K - data.meta.stagnation.T_ve_K
+                    data.meta.stagnation.T_tr_K -
+                    data.meta.stagnation.T_ve_K
                   ).toLocaleString()}{" "}
                   K
                 </span>
@@ -197,10 +284,82 @@ export default function App() {
   );
 }
 
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function validateLOSData(d: unknown): asserts d is LOSData {
+  if (!d || typeof d !== "object") throw new Error("response is not an object");
+  const obj = d as Record<string, unknown>;
+  if (!obj.meta || typeof obj.meta !== "object") {
+    throw new Error("response missing meta");
+  }
+  if (!Array.isArray(obj.frequencies)) {
+    throw new Error("response missing frequencies array");
+  }
+}
+
+interface SelectorRowProps<T extends number> {
+  label: string;
+  value: T;
+  options: readonly T[];
+  format: (v: T) => string;
+  onChange: (v: T) => void;
+}
+
+function SelectorRow<T extends number>({
+  label,
+  value,
+  options,
+  format,
+  onChange,
+}: SelectorRowProps<T>) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <div className="flex gap-1">
+        {options.map((opt) => (
+          <button
+            key={opt}
+            onClick={() => onChange(opt)}
+            className={[
+              "rounded px-2 py-1 text-xs font-medium transition-colors tabular-nums",
+              opt === value
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-muted/80",
+            ].join(" ")}
+          >
+            {format(opt)}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="flex h-[380px] items-center justify-center rounded-lg border border-border bg-card">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Fetching scan…
+      </div>
+    </div>
+  );
+}
+
+function ErrorBanner({ message }: { message: string | null }) {
+  return (
+    <div className="rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+      <div className="font-medium">Failed to load scan</div>
+      <div className="mt-1 font-mono text-xs">{message ?? "unknown error"}</div>
+    </div>
+  );
+}
+
 function SourceBadge({ source }: { source: DataSource }) {
   if (source === "loading") {
     return (
-      <span className="mt-1 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs text-muted-foreground animate-pulse">
+      <span className="mt-1 flex items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" />
         connecting…
       </span>
     );
@@ -210,6 +369,14 @@ function SourceBadge({ source }: { source: DataSource }) {
       <span className="mt-1 flex items-center gap-1.5 rounded-full border border-emerald-700 bg-emerald-950 px-2.5 py-0.5 text-xs font-medium text-emerald-400">
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
         LIVE
+      </span>
+    );
+  }
+  if (source === "error") {
+    return (
+      <span className="mt-1 flex items-center gap-1.5 rounded-full border border-red-700 bg-red-950 px-2.5 py-0.5 text-xs font-medium text-red-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+        ERROR
       </span>
     );
   }

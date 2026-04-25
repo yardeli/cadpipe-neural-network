@@ -89,6 +89,15 @@ export interface UQSummary {
   log10_ne_std: number;
 }
 
+export interface StationEntry {
+  zL: number;             // axial position normalized by length, 0..1
+  z_m: number;            // axial position in meters
+  r_wall_m: number;       // wall radius at this station
+  max_ne_m3: number;      // peak ne in this axial band
+  p99_ne_m3: number;      // 99th-percentile ne (less spiky than max)
+  max_T_tr_K: number;     // peak translational temperature
+}
+
 export interface LOSMeta {
   mach: number;
   altitude_km: number;
@@ -98,6 +107,7 @@ export interface LOSMeta {
   plasmanet_version: string;
   stagnation: StagnationState;
   uq: UQSummary;
+  station_profile?: StationEntry[];   // 5 reflectometer stations along the body
 }
 
 export interface LOSData {

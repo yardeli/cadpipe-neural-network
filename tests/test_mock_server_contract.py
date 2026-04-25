@@ -43,6 +43,17 @@ def _analyze_req(*, mach: float = 22.5, alt: float = 61.0, freq: float = 9.2e9,
     }
 
 
+def _scan_req(*, mach: float = 22.5, alt: float = 61.0,
+              angles: list[float] | None = None) -> dict:
+    """Body for POST /api/plasma/analyze_scan (frontend convenience endpoint)."""
+    return {
+        "vehicle": {"nose_radius_m": 0.1524, "half_angle_deg": 9.0,
+                    "length_m": 1.295, "name": "ram_c"},
+        "flight": {"mach": mach, "altitude_km": alt},
+        "aspect_angles_deg": angles or [0.0, 45.0, 90.0, 135.0, 180.0],
+    }
+
+
 def _submit_req() -> dict:
     return {
         "mesh_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -115,6 +126,61 @@ class TestAnalyzeRoute:
         body = _analyze_req()
         del body["flight"]
         assert client.post("/api/plasma/analyze", json=body).status_code == 422
+
+
+# ── POST /api/plasma/analyze_scan (frontend convenience endpoint) ───────────
+
+class TestAnalyzeScanRoute:
+    """Frontend-facing multi-band scan: shape must include meta.station_profile."""
+
+    def test_returns_200(self):
+        assert client.post("/api/plasma/analyze_scan",
+                           json=_scan_req()).status_code == 200
+
+    def test_top_level_keys(self):
+        body = client.post("/api/plasma/analyze_scan", json=_scan_req()).json()
+        for key in ("meta", "frequencies"):
+            assert key in body, f"Missing top-level key: {key!r}"
+
+    def test_meta_contains_station_profile(self):
+        meta = client.post("/api/plasma/analyze_scan",
+                           json=_scan_req()).json()["meta"]
+        assert "station_profile" in meta, "meta missing station_profile"
+        sp = meta["station_profile"]
+        assert isinstance(sp, list) and len(sp) >= 5
+
+    def test_station_entry_required_fields(self):
+        sp = client.post("/api/plasma/analyze_scan",
+                         json=_scan_req()).json()["meta"]["station_profile"]
+        for station in sp:
+            for field in ("zL", "z_m", "r_wall_m",
+                          "max_ne_m3", "p99_ne_m3", "max_T_tr_K"):
+                assert field in station, f"station missing field {field!r}: {station}"
+
+    def test_station_zl_monotonic_increasing(self):
+        sp = client.post("/api/plasma/analyze_scan",
+                         json=_scan_req()).json()["meta"]["station_profile"]
+        zls = [s["zL"] for s in sp]
+        assert zls == sorted(zls), f"zL not monotonic increasing: {zls}"
+
+    def test_frequencies_each_have_aspect_scan(self):
+        body = client.post("/api/plasma/analyze_scan", json=_scan_req()).json()
+        for band in body["frequencies"]:
+            for field in ("label", "frequency_mhz", "color", "aspect_scan"):
+                assert field in band, f"band missing {field!r}"
+            assert isinstance(band["aspect_scan"], list)
+
+    def test_synthetic_profile_for_non_nemo_condition(self):
+        """Non-(M22.5, 61km) condition gets a synthetic profile, not the JSON one."""
+        body = client.post(
+            "/api/plasma/analyze_scan",
+            json=_scan_req(mach=10.0, alt=35.0),
+        ).json()
+        sp = body["meta"]["station_profile"]
+        # All required fields present; ne values should be > 0 (synthetic decay).
+        assert all(s["max_ne_m3"] > 0 for s in sp)
+        # zL values match the canonical RAM-C station grid.
+        assert [s["zL"] for s in sp] == [0.14, 0.32, 0.48, 0.67, 0.88]
 
 
 # ── POST /api/plasma/submit_cfd ───────────────────────────────────────────────

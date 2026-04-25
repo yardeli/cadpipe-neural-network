@@ -291,6 +291,65 @@ def _estimated_runtime(mesh_id: str) -> int:
     return 20 + h
 
 
+# Reflectometer station axial positions on the RAM-C II body, from the
+# Jones & Cross 1972 instrumentation layout (5 stations, zL = z / vehicle_length).
+_STATION_ZL = [0.14, 0.32, 0.48, 0.67, 0.88]
+_STATION_RWALL = [0.1864834, 0.2588968, 0.3232642, 0.3997005, 0.4841828]
+
+
+def _build_station_profile(
+    req: "MultiFreqScanRequest", stag_ne: float, stag_T_tr: float
+) -> list[dict]:
+    """Build a 5-station ne/T_tr profile for the frontend's secondary chart.
+
+    For Mach 22.5 / 61 km we have real NEMO data — read it straight out of
+    ram_c_validation.json["station_profile"].
+
+    For any other (mach, altitude) we don't have a CFD run, so we synthesize
+    a plausible decay profile keyed on the stagnation ne: each station ne
+    drops by ~10× per zL unit, matching the rough behavior of the RAM-C
+    boundary-layer expansion.  Good enough to make the chart render and
+    eyeball-correct; replace with real per-condition CFD when available.
+    """
+    vj = _load_validation_json()
+    json_stations = vj.get("station_profile") if vj else None
+
+    if (
+        json_stations
+        and abs(req.flight.mach - 22.5) < 0.6
+        and abs(req.flight.altitude_km - 61.0) < 1.0
+    ):
+        return [
+            {
+                "zL": s["zL"],
+                "z_m": s["z_m"],
+                "r_wall_m": s["r_wall_m"],
+                "max_ne_m3": s.get("max_ne_m3", 0.0),
+                "p99_ne_m3": s.get("p99_ne_m3", 0.0),
+                "max_T_tr_K": s.get("max_T_tr_K", 0.0),
+            }
+            for s in json_stations
+        ]
+
+    # Synthetic decay: ne(zL) ≈ stag_ne * 10^(-2 * zL); temperature decays
+    # more slowly (T(zL) ≈ T_stag * 10^(-0.7 * zL)).  Length and r_wall are
+    # taken from the canonical RAM-C geometry.
+    length = max(req.vehicle.length_m, 0.5)
+    profile: list[dict] = []
+    for zL, r_wall in zip(_STATION_ZL, _STATION_RWALL):
+        ne = stag_ne * 10 ** (-2.0 * zL)
+        t_tr = stag_T_tr * 10 ** (-0.7 * zL)
+        profile.append({
+            "zL": zL,
+            "z_m": zL * length,
+            "r_wall_m": r_wall,
+            "max_ne_m3": ne,
+            "p99_ne_m3": ne * 0.92,
+            "max_T_tr_K": t_tr,
+        })
+    return profile
+
+
 # ── Core prediction logic ─────────────────────────────────────────────────────
 
 def _try_real_physics(req: PlasmaAnalyzeRequest) -> Optional[DetectabilityResponse]:
@@ -651,6 +710,12 @@ def create_app() -> "FastAPI":
         ku_resp = _predict(analyze_req, freq_hz=12e9)
         stag = ku_resp.stagnation
 
+        # Build a station profile for the second chart on the frontend.
+        # Uses the validation JSON's reflectometer-station results when the
+        # flight condition matches the NEMO run; otherwise scales the same
+        # zL grid by the stagnation ne for a plausible synthetic shape.
+        station_profile = _build_station_profile(req, stag.ne_m3, stag.T_tr_K)
+
         uq_band = None
         if ku_resp.uq and ku_p05:
             uq_band = {
@@ -676,6 +741,7 @@ def create_app() -> "FastAPI":
                     "fp_GHz": stag.fp_GHz,
                 },
                 "uq": ku_resp.uq.model_dump() if ku_resp.uq else None,
+                "station_profile": station_profile,
             },
             "frequencies": frequencies,
             "uq_band": uq_band,
