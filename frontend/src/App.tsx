@@ -2,15 +2,12 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { LOSPolarPlot } from "@/components/LOSPolarPlot";
 import { StationProfileChart } from "@/components/StationProfileChart";
+import { LiveMockBadge, type DataSource } from "@/components/LiveMockBadge";
+import { FlightSelectors } from "@/components/FlightSelectors";
 import staticMock from "@/data/mock_los.json";
 import type { LOSData, MultiFreqScanRequest } from "@/types/los";
 
 const MOCK_SERVER = "http://localhost:8200";
-
-// RAM-C II validation grid — Jones & Cross 1972 instrumented altitudes
-// and the matching trajectory Mach numbers.
-const ALTITUDE_OPTIONS_KM = [47, 61, 71, 81] as const;
-const MACH_OPTIONS = [18.5, 22.5, 23.6, 23.9] as const;
 
 // Default to the J&C primary validation point (M22.5 / 61 km).
 const DEFAULT_MACH = 22.5;
@@ -26,8 +23,6 @@ const RAM_C_VEHICLE = {
 const DEFAULT_ANGLES = [
   0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180,
 ] as const;
-
-type DataSource = "loading" | "live" | "mock" | "error";
 
 export default function App() {
   const [mach, setMach] = useState<number>(DEFAULT_MACH);
@@ -68,8 +63,6 @@ export default function App() {
           setSource("live");
         }
       } catch (err) {
-        // Server unreachable → fall back to static mock; malformed server
-        // response → show inline error so the user sees what went wrong.
         if (cancelled) return;
 
         const msg = err instanceof Error ? err.message : String(err);
@@ -116,28 +109,16 @@ export default function App() {
               Aspect-resolved LOS radar attenuation
             </p>
           </div>
-          <SourceBadge source={source} />
+          <LiveMockBadge source={source} />
         </div>
 
-        {/* Flight-condition selectors */}
-        <div className="flex flex-wrap gap-4 rounded-lg border border-border bg-card p-3">
-          <SelectorRow
-            label="Mach"
-            value={mach}
-            options={MACH_OPTIONS}
-            format={(v) => v.toFixed(1)}
-            onChange={setMach}
-          />
-          <SelectorRow
-            label="Altitude"
-            value={alt}
-            options={ALTITUDE_OPTIONS_KM}
-            format={(v) => `${v} km`}
-            onChange={setAlt}
-          />
-        </div>
+        <FlightSelectors
+          mach={mach}
+          alt={alt}
+          onMachChange={setMach}
+          onAltChange={setAlt}
+        />
 
-        {/* Error state */}
         {source === "error" && <ErrorBanner message={errorMsg} />}
 
         {/* Frequency / UQ controls */}
@@ -178,7 +159,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Loading skeleton OR charts */}
         {source === "loading" ? (
           <LoadingSkeleton />
         ) : (
@@ -200,7 +180,6 @@ export default function App() {
           </>
         )}
 
-        {/* Stagnation summary cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { label: "Mach", value: data.meta.mach.toFixed(1) },
@@ -226,7 +205,6 @@ export default function App() {
           ))}
         </div>
 
-        {/* Two-temperature row (NEMO mode) */}
         {data.meta.stagnation.T_ve_K && (
           <div className="rounded-lg border border-border bg-card p-3">
             <div className="text-xs font-medium text-muted-foreground mb-2">
@@ -284,7 +262,7 @@ export default function App() {
   );
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// ── Helpers (kept inline — small, single-use) ────────────────────────────────
 
 function validateLOSData(d: unknown): asserts d is LOSData {
   if (!d || typeof d !== "object") throw new Error("response is not an object");
@@ -297,49 +275,14 @@ function validateLOSData(d: unknown): asserts d is LOSData {
   }
 }
 
-interface SelectorRowProps<T extends number> {
-  label: string;
-  value: T;
-  options: readonly T[];
-  format: (v: T) => string;
-  onChange: (v: T) => void;
-}
-
-function SelectorRow<T extends number>({
-  label,
-  value,
-  options,
-  format,
-  onChange,
-}: SelectorRowProps<T>) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <div className="flex gap-1">
-        {options.map((opt) => (
-          <button
-            key={opt}
-            onClick={() => onChange(opt)}
-            className={[
-              "rounded px-2 py-1 text-xs font-medium transition-colors tabular-nums",
-              opt === value
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:bg-muted/80",
-            ].join(" ")}
-          >
-            {format(opt)}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function LoadingSkeleton() {
   return (
-    <div className="flex h-[380px] items-center justify-center rounded-lg border border-border bg-card">
+    <div
+      data-testid="loading-skeleton"
+      className="flex h-[380px] items-center justify-center rounded-lg border border-border bg-card"
+    >
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
         Fetching scan…
       </div>
     </div>
@@ -348,42 +291,13 @@ function LoadingSkeleton() {
 
 function ErrorBanner({ message }: { message: string | null }) {
   return (
-    <div className="rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+    <div
+      data-testid="error-banner"
+      role="alert"
+      className="rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-300"
+    >
       <div className="font-medium">Failed to load scan</div>
       <div className="mt-1 font-mono text-xs">{message ?? "unknown error"}</div>
     </div>
-  );
-}
-
-function SourceBadge({ source }: { source: DataSource }) {
-  if (source === "loading") {
-    return (
-      <span className="mt-1 flex items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
-        <Loader2 className="h-3 w-3 animate-spin" />
-        connecting…
-      </span>
-    );
-  }
-  if (source === "live") {
-    return (
-      <span className="mt-1 flex items-center gap-1.5 rounded-full border border-emerald-700 bg-emerald-950 px-2.5 py-0.5 text-xs font-medium text-emerald-400">
-        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-        LIVE
-      </span>
-    );
-  }
-  if (source === "error") {
-    return (
-      <span className="mt-1 flex items-center gap-1.5 rounded-full border border-red-700 bg-red-950 px-2.5 py-0.5 text-xs font-medium text-red-400">
-        <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
-        ERROR
-      </span>
-    );
-  }
-  return (
-    <span className="mt-1 flex items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
-      MOCK
-    </span>
   );
 }
