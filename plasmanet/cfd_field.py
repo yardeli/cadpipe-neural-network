@@ -662,6 +662,24 @@ def extract_nemo_field(
                 float(x_NO_full[i]), float(x_O_full[i]), float(x_N_full[i]),
             )
 
+    elif n_species == 7:
+        # AIR-7 (CSU2TCLib built-in): order e-, N2, O2, NO, N, O, NO+
+        notes.append("AIR-7 NEMO: using solver electron density directly")
+        rho_e = fields["Density_0"]
+        if rho_e.ndim == 2 and rho_e.shape[1] == 1:
+            rho_e = rho_e[:, 0]
+        ne_full = rho_e / 9.10938e-31  # rho_e / m_e (number density m^-3)
+        # Neutral mass fractions for downstream use (PEC, optical, etc.)
+        for sp, i in [("N2",1), ("O2",2), ("NO",3), ("N",4), ("O",5)]:
+            y_i = fields[f"MassFrac_{i}"]
+            if y_i.ndim == 2 and y_i.shape[1] == 1:
+                y_i = y_i[:, 0]
+            if sp == "N2":  x_N2_full = y_i
+            elif sp == "O2": x_O2_full = y_i
+            elif sp == "NO": x_NO_full = y_i
+            elif sp == "N":  x_N_full = y_i
+            elif sp == "O":  x_O_full = y_i
+
     elif n_species == 11:
         # AIR-11: order e-, N+, O+, NO+, N2+, O2+, N, O, NO, N2, O2
         # Electrons come directly from the solver
@@ -681,7 +699,7 @@ def extract_nemo_field(
             elif sp == "N":  x_N_full = y_i
             elif sp == "O":  x_O_full = y_i
     else:
-        raise ValueError(f"NEMO output has {n_species} species, expected 5 or 11")
+        raise ValueError(f"NEMO output has {n_species} species, expected 5, 7, or 11")
 
     # Collision frequencies at each cell (heavy particle T used for ν_en)
     nu_full = np.zeros(n_points)
