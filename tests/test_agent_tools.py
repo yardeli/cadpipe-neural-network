@@ -29,6 +29,7 @@ from plasmanet.agent_tools import (
     AnalyzePlasmaInput,
     AnalyzePlasmaOutput,
     analyze_plasma,
+    generate_plasma_report,
     _VEHICLE_PRESETS,
 )
 
@@ -241,3 +242,102 @@ def test_vehicle_preset_dispatch(service_env, httpserver):
     )))
     body = json.loads(httpserver.log[-1][0].get_data())
     assert body["vehicle"] == _VEHICLE_PRESETS["generic_spherecone"]
+
+
+# ── generate_plasma_report ────────────────────────────────────────────────────
+
+# Minimal valid PDF (used as the upstream's stubbed response body).
+_FAKE_PDF_BYTES = (
+    b"%PDF-1.4\n"
+    b"1 0 obj <</Type /Catalog>> endobj\n"
+    b"trailer <</Root 1 0 R>>\n"
+    b"%%EOF"
+)
+
+
+def test_generate_plasma_report_happy_path(service_env, httpserver):
+    """Upstream returns a valid PDF; the tool returns those bytes verbatim."""
+    httpserver.expect_request(
+        "/api/plasma/report", method="POST"
+    ).respond_with_data(
+        _FAKE_PDF_BYTES,
+        content_type="application/pdf",
+    )
+
+    out = asyncio.run(generate_plasma_report(
+        AnalyzePlasmaInput(mach=22.5, altitude_km=61.0)
+    ))
+
+    assert isinstance(out, bytes)
+    assert out == _FAKE_PDF_BYTES
+    assert out[:5] == b"%PDF-"
+
+
+def test_generate_plasma_report_request_url_and_payload(service_env, httpserver):
+    """Tool POSTs to /api/plasma/report with the canonical request body shape."""
+    httpserver.expect_request(
+        "/api/plasma/report", method="POST"
+    ).respond_with_data(
+        _FAKE_PDF_BYTES, content_type="application/pdf",
+    )
+
+    asyncio.run(generate_plasma_report(AnalyzePlasmaInput(
+        mach=18.5,
+        altitude_km=47.0,
+        vehicle_name="ram_c",
+        radar_frequency_hz=12e9,
+        include_uq=True,
+    )))
+
+    request, _ = httpserver.log[0]
+    assert request.path == "/api/plasma/report"
+    assert request.method == "POST"
+    body = json.loads(request.get_data())
+    assert body["vehicle"]["name"] == "ram_c"
+    assert body["flight"]["mach"] == pytest.approx(18.5)
+    assert body["flight"]["altitude_km"] == pytest.approx(47.0)
+    assert body["radar"]["frequency_hz"] == pytest.approx(12e9)
+    assert body["uncertainty"]["enabled"] is True
+
+
+def test_generate_plasma_report_http_error_raises(service_env, httpserver):
+    httpserver.expect_request(
+        "/api/plasma/report", method="POST"
+    ).respond_with_data("rendering failed", status=500)
+
+    with pytest.raises(RuntimeError) as exc:
+        asyncio.run(generate_plasma_report(
+            AnalyzePlasmaInput(mach=22.5, altitude_km=61.0)
+        ))
+    assert "500" in str(exc.value)
+    assert "/report" in str(exc.value)
+
+
+def test_generate_plasma_report_wrong_content_type_raises(service_env, httpserver):
+    """If the upstream returns JSON instead of a PDF, surface that as RuntimeError."""
+    httpserver.expect_request(
+        "/api/plasma/report", method="POST"
+    ).respond_with_json({"error": "wrong endpoint"})
+
+    with pytest.raises(RuntimeError) as exc:
+        asyncio.run(generate_plasma_report(
+            AnalyzePlasmaInput(mach=22.5, altitude_km=61.0)
+        ))
+    msg = str(exc.value).lower()
+    assert "content-type" in msg or "pdf" in msg
+
+
+def test_generate_plasma_report_invalid_pdf_magic_raises(service_env, httpserver):
+    """Right Content-Type but wrong magic bytes — defense in depth."""
+    httpserver.expect_request(
+        "/api/plasma/report", method="POST"
+    ).respond_with_data(
+        b"<html>error page</html>",
+        content_type="application/pdf",   # wrongly labelled
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        asyncio.run(generate_plasma_report(
+            AnalyzePlasmaInput(mach=22.5, altitude_km=61.0)
+        ))
+    assert "%PDF-" in str(exc.value) or "magic" in str(exc.value).lower()
