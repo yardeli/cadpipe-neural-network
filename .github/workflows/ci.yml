@@ -70,7 +70,13 @@ jobs:
             pydantic \
             boto3 \
             httpx \
-            pytest
+            pytest \
+            "moto[batch]" \
+            pytest-httpserver
 
-      - name: Run mock_server contract tests
-        run: pytest tests/test_mock_server_contract.py -v
+      - name: Run mock_server + lambda contract tests
+        run: |
+          pytest \
+            tests/test_mock_server_contract.py \
+            tests/test_simulation_complete_lambda.py \
+            -v
