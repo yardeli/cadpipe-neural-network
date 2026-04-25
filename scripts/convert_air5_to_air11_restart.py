@@ -137,31 +137,54 @@ def convert(input_path: Path, output_path: Path, seed: float) -> None:
 
             # Total density per cell — preserved.
             rho = rho_n2 + rho_o2 + rho_no + rho_n + rho_o
-            # 6 ions seeded at trace * rho_total each
-            ion_each = seed * rho
-            ion_total = 6 * ion_each
-            # Subtract from N2+O2 proportionally to preserve total
+            # CHARGE-BALANCED ion seeding. AIR-11 has 5 cation species
+            # (N+, O+, NO+, N2+, O2+) and 1 electron. For charge
+            # neutrality the SUM of cation NUMBER densities must equal
+            # the electron NUMBER density. In mass terms (kg/m^3):
+            #   rho_e = sum_i (rho_i+ * M_e / M_i+)
+            # M_e = 5.486e-7 kg/mol; M_cation_i ranges ~14e-3 to ~30e-3 kg/mol.
+            # Average M_e / M_cation ~ 1.83e-5.
+            rho_cation_each = seed * rho   # N+, O+, NO+, N2+, O2+ each at seed
+            rho_cation_total = 5 * rho_cation_each
+            # Molecular weights (kg/mol) for AIR-11 cations
+            M_N_p, M_O_p, M_NO_p, M_N2_p, M_O2_p = 0.014, 0.016, 0.030, 0.028, 0.032
+            M_e = 5.486e-7
+            # Electron mass = sum over cations of (rho_i * M_e / M_i)
+            rho_e = rho_cation_each * M_e * (
+                1/M_N_p + 1/M_O_p + 1/M_NO_p + 1/M_N2_p + 1/M_O2_p
+            )
+            # Total mass we're adding (will subtract from N2+O2 to preserve rho)
+            ion_total_mass = rho_cation_total + rho_e
             if rho_n2 + rho_o2 > 0:
                 f_n2 = rho_n2 / (rho_n2 + rho_o2)
                 f_o2 = rho_o2 / (rho_n2 + rho_o2)
             else:
                 f_n2, f_o2 = 0.5, 0.5
-            new_rho_n2 = max(rho_n2 - ion_total * f_n2, 0.0)
-            new_rho_o2 = max(rho_o2 - ion_total * f_o2, 0.0)
+            new_rho_n2 = max(rho_n2 - ion_total_mass * f_n2, 0.0)
+            new_rho_o2 = max(rho_o2 - ion_total_mass * f_o2, 0.0)
+
+            # FLOOR: Mutation++ EOS inversion may NaN if any species mass
+            # density is exactly zero (likely log(rho_i) somewhere in the
+            # solver for ChemNonEqTTv state). AIR-5 freestream cells have
+            # rho_N=rho_O=rho_NO=0 — those map to AIR-11 with zeros in
+            # 6 species, which causes "non-physical" flag in 89% of cells.
+            # 1e-25 mass fraction is so small it's physically equivalent
+            # to zero (~1e-29 kg/m³) but Mutation++ won't divide by it.
+            FLOOR = 1e-25 * rho
 
             # AIR-11 species order: e-, N+, O+, NO+, N2+, O2+, N, O, NO, N2, O2
             new_densities = [
-                ion_each,    # 0: e-
-                ion_each,    # 1: N+
-                ion_each,    # 2: O+
-                ion_each,    # 3: NO+
-                ion_each,    # 4: N2+
-                ion_each,    # 5: O2+
-                rho_n,       # 6: N
-                rho_o,       # 7: O
-                rho_no,      # 8: NO
-                new_rho_n2,  # 9: N2
-                new_rho_o2,  # 10: O2
+                max(rho_e, FLOOR),              # 0: e-  (charge-balanced)
+                max(rho_cation_each, FLOOR),    # 1: N+
+                max(rho_cation_each, FLOOR),    # 2: O+
+                max(rho_cation_each, FLOOR),    # 3: NO+
+                max(rho_cation_each, FLOOR),    # 4: N2+
+                max(rho_cation_each, FLOOR),    # 5: O2+
+                max(rho_n, FLOOR),              # 6: N
+                max(rho_o, FLOOR),              # 7: O
+                max(rho_no, FLOOR),             # 8: NO
+                max(new_rho_n2, FLOOR),         # 9: N2
+                max(new_rho_o2, FLOOR),         # 10: O2
             ]
 
             row_out = []

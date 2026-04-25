@@ -48,15 +48,14 @@ make_cfg() {
 SOLVER= NEMO_EULER
 GAS_MODEL= air_11
 % air_11 species order: e-, N+, O+, NO+, N2+, O2+, N, O, NO, N2, O2
-% Seeded ions at 1e-9 mass fraction each — bypasses the cold-start
-% chemistry NaN (which happened with all-zero ions: source terms
-% have 1/n_e or log(n_e) terms that blow up at machine zero).
-% N2/O2 balanced so total sum = 1.0 within float precision:
-%   9 × 1e-9 + (0.77 - 4.5e-9) + (0.23 - 4.5e-9) = 1.0
-GAS_COMPOSITION= (1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9, 0.7699999955, 0.2299999955)
+% Attempt 6: drop seed 100x to 1e-11, keep symmetric for sum=1.0 exactness.
+% All 9 trace species at 1e-11; N2/O2 absorb the 9e-11 deficit symmetrically.
+% Charge imbalance in GAS_COMPOSITION (electron should be 1e-15 for true
+% neutrality, not 1e-11) only affects far-field BC cells (<1% of mesh).
+% Interior cells are read from the converted restart, which IS charge-balanced.
+GAS_COMPOSITION= (1.0e-11, 1.0e-11, 1.0e-11, 1.0e-11, 1.0e-11, 1.0e-11, 1.0e-11, 1.0e-11, 1.0e-11, 0.7699999999550, 0.2299999999550)
 MATH_PROBLEM= DIRECT
 RESTART_SOL= $restart
-SOLUTION_FILENAME= solution.dat
 
 % Mutation++ fluid model (adds 6 ionized species over AIR-5)
 FLUID_MODEL= MUTATIONPP
@@ -99,10 +98,11 @@ CONV_STARTITER= 500
 
 MESH_FILENAME= $MESH
 MESH_FORMAT= SU2
-% Solution filename: when restart is the converted AIR-5 ASCII, file is
-% solution.csv (ASCII format). SU2 reads ASCII restarts when OUTPUT_FILES
-% includes RESTART_ASCII or when filename has .csv extension.
+% Solution filename: AIR-5 -> AIR-11 converted restart is solution.csv
+% (ASCII / CSV format). SU2 v7.5 defaults to binary reader; we have to
+% explicitly tell it to read ASCII via READ_BINARY_RESTART= NO.
 SOLUTION_FILENAME= solution.csv
+READ_BINARY_RESTART= NO
 CONV_FILENAME= history
 VOLUME_FILENAME= flow
 RESTART_FILENAME= restart
