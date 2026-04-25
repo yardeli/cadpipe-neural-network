@@ -75,7 +75,8 @@ jobs:
             pytest-httpserver \
             reportlab \
             Pillow \
-            matplotlib
+            matplotlib \
+            pypdf
 
       - name: Run mock_server + lambda + PDF + agent contract tests
         run: |

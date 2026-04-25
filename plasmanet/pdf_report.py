@@ -164,8 +164,16 @@ def build_pdf(
     frequencies: list[dict],
     station_profile: Optional[list[dict]],
     benchmark_log10_error: Optional[float] = None,
+    benchmark_canonical_point: Optional[tuple[float, float]] = None,
 ) -> bytes:
-    """Compose the one-page PDF and return its bytes."""
+    """Compose the one-page PDF and return its bytes.
+
+    Validation section is rendered when *both* benchmark_log10_error and
+    benchmark_canonical_point are non-None.  The matched (mach, altitude)
+    is shown explicitly so the reader knows the error is for the canonical
+    RAM-C trajectory point near the request, not for the request itself
+    (which may be off-grid by up to ±0.1 Mach / ±1 km).
+    """
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.colors import HexColor, black, white
     from reportlab.lib.utils import ImageReader
@@ -305,18 +313,33 @@ def build_pdf(
         c.drawString(40, y, uq_text)
         y -= 16
 
-    # ── Validation snippet (if benchmark_log10_error provided) ─────────────
-    if benchmark_log10_error is not None:
+    # ── Validation snippet (if both benchmark fields provided) ─────────────
+    # Explicit attribution: this is the model's error at the nearest
+    # canonical RAM-C trajectory point — NOT a specific evaluation of the
+    # current request's prediction. The dispatcher in mock_server.py
+    # rounds the request to the nearest canonical (mach, alt) within
+    # ±0.1 Mach and ±1 km tolerance.
+    if benchmark_log10_error is not None and benchmark_canonical_point is not None:
+        matched_mach, matched_alt = benchmark_canonical_point
+        pass_fail = (
+            "within ±0.5 (PASS)"
+            if abs(benchmark_log10_error) < 0.5
+            else "outside ±0.5 (FAIL)"
+        )
         c.setFont("Helvetica-Bold", 9)
-        c.drawString(40, y, "Validation")
+        c.drawString(40, y, "Model accuracy at nearest canonical RAM-C point")
         y -= 12
         c.setFont("Helvetica", 9)
-        bench = (
-            f"log10(n_e_pred / n_e_ref) vs Jones & Cross 1972 = "
-            f"{benchmark_log10_error:+.2f}   "
-            f"({'within ±0.5 (PASS)' if abs(benchmark_log10_error) < 0.5 else 'outside ±0.5 (FAIL)'})"
+        c.drawString(
+            40, y,
+            f"M{matched_mach:.1f} @ {matched_alt:.0f} km   |   "
+            f"Reference: Jones & Cross 1972 / Grantham 1970"
         )
-        c.drawString(40, y, bench)
+        y -= 12
+        c.drawString(
+            40, y,
+            f"log10 error = {benchmark_log10_error:+.2f}    ({pass_fail})"
+        )
 
     # ── Footer ─────────────────────────────────────────────────────────────
     ts = datetime.now(timezone.utc).isoformat(timespec="seconds")

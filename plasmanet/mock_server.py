@@ -589,23 +589,29 @@ def _build_benchmark() -> RamCBenchmarkResponse:
     )
 
 
-def _resolve_benchmark_error(mach: float, altitude_km: float) -> Optional[float]:
-    """Return the RAM-C benchmark log10 error for the canonical trajectory
-    point matching (mach, altitude_km), or None if outside tolerance.
+def _resolve_benchmark_error(
+    mach: float, altitude_km: float
+) -> Optional[tuple[float, tuple[float, float]]]:
+    """Resolve the RAM-C benchmark error for a request's flight condition.
 
-    Drives the auto-fill of the PDF report's Validation section.
-    Extracted as a module-level helper so the dispatch logic is unit-testable
-    without rendering the full PDF.
+    Returns (log10_error, (matched_mach, matched_alt)) when (mach, altitude_km)
+    is within tolerance of a canonical RAM-C trajectory point — the matched
+    point is included so build_pdf can render explicit attribution
+    ("model accuracy at nearest canonical point M22.5 @ 61 km, …") rather
+    than implying the error is for the specific request.
+
+    Returns None when outside tolerance, so the PDF Validation section
+    stays hidden.
     """
     from .pdf_report import find_canonical_match
     match = find_canonical_match(mach, altitude_km)
     if match is None:
         return None
-    _matched_mach, matched_alt = match
+    matched_mach, matched_alt = match
     bench = _build_benchmark()
     for case in bench.cases:
         if abs(case.altitude_km - matched_alt) < 0.5:
-            return case.log10_error
+            return (case.log10_error, (matched_mach, matched_alt))
     return None
 
 
@@ -803,16 +809,25 @@ def create_app() -> "FastAPI":
         scan = _compute_scan_data(scan_req)
 
         # Auto-fill the Validation section when the flight condition matches
-        # a published J&C 1972 trajectory point (±0.1 Mach, ±1 km).
-        benchmark_log10_error = _resolve_benchmark_error(
+        # a published J&C 1972 trajectory point (±0.1 Mach, ±1 km).  Both the
+        # log10 error AND the matched point are passed through so the PDF
+        # attribution makes clear the error is at the nearest canonical
+        # point, not for the specific request.
+        bench_result = _resolve_benchmark_error(
             req.flight.mach, req.flight.altitude_km
         )
+        if bench_result is not None:
+            benchmark_log10_error, benchmark_canonical_point = bench_result
+        else:
+            benchmark_log10_error = None
+            benchmark_canonical_point = None
 
         pdf_bytes = build_pdf(
             meta=scan["meta"],
             frequencies=scan["frequencies"],
             station_profile=scan["meta"].get("station_profile"),
             benchmark_log10_error=benchmark_log10_error,
+            benchmark_canonical_point=benchmark_canonical_point,
         )
         filename = (
             f"plasmanet_M{req.flight.mach:.1f}_"

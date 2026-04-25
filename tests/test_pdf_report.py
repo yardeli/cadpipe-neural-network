@@ -150,14 +150,19 @@ class TestValidationSectionAutofill:
                 f"missing %%EOF at M{mach}/{alt}km"
             )
 
-    def test_resolve_benchmark_error_canonical_returns_float(self):
-        """At every canonical trajectory point the dispatcher returns a float
-        log10_error pulled from the RAM-C benchmark."""
+    def test_resolve_benchmark_error_canonical_returns_tuple(self):
+        """At every canonical trajectory point the dispatcher returns
+        (log10_error, (matched_mach, matched_alt)) — both fields populated."""
         from plasmanet.mock_server import _resolve_benchmark_error
         for mach, alt in [(23.9, 81.0), (23.6, 71.0), (22.5, 61.0), (18.5, 47.0)]:
-            err = _resolve_benchmark_error(mach, alt)
-            assert err is not None, f"None at canonical M{mach}/{alt}km"
-            assert isinstance(err, (int, float))
+            result = _resolve_benchmark_error(mach, alt)
+            assert result is not None, f"None at canonical M{mach}/{alt}km"
+            log10_err, point = result
+            assert isinstance(log10_err, (int, float))
+            assert point == (mach, alt), (
+                f"matched point should equal the exact canonical key, "
+                f"got {point} for input M{mach}/{alt}km"
+            )
 
     def test_resolve_benchmark_error_off_grid_returns_none(self):
         """Outside the ±0.1 Mach / ±1 km window the dispatcher returns None
@@ -169,12 +174,104 @@ class TestValidationSectionAutofill:
         assert _resolve_benchmark_error(22.7, 61.0) is None      # just-outside Mach
         assert _resolve_benchmark_error(22.5, 62.5) is None      # just-outside alt
 
-    def test_resolve_benchmark_error_within_tolerance(self):
-        """Inputs slightly off the canonical point still resolve to that point."""
+    def test_build_pdf_renders_attribution_when_canonical_point_provided(self):
+        """build_pdf must render the explicit attribution block ("Model
+        accuracy at nearest canonical RAM-C point — M22.5 @ 61 km | Reference:
+        Jones & Cross 1972 / Grantham 1970 | log10 error = …") when both
+        benchmark_log10_error and benchmark_canonical_point are supplied.
+
+        Uses pypdf to extract the page text rather than scanning raw bytes —
+        reportlab's content streams use compound filters (ASCII85+Flate) that
+        a naive scan can't decode.
+        """
+        import io
+        import pypdf
+        from plasmanet.pdf_report import build_pdf
+
+        pdf_bytes = build_pdf(
+            meta={
+                "mach": 22.5, "altitude_km": 61.0,
+                "vehicle": "ram_c", "engine": "plasmanet_nn_mock",
+                "plasmanet_version": "test",
+                "stagnation": {
+                    "T_tr_K": 6064.0, "T_ve_K": 5911.0,
+                    "p_Pa": 231437.0, "ne_m3": 5.64e20, "fp_GHz": 213.0,
+                },
+                "uq": None,
+            },
+            frequencies=[{
+                "label": "VHF 225 MHz", "frequency_mhz": 225, "color": "#f59e0b",
+                "aspect_scan": [
+                    {"angle_deg": 0.0,   "attenuation_db": 100.0, "status": "BLACKOUT"},
+                    {"angle_deg": 90.0,  "attenuation_db": 200.0, "status": "BLACKOUT"},
+                    {"angle_deg": 180.0, "attenuation_db": 150.0, "status": "BLACKOUT"},
+                ],
+            }],
+            station_profile=None,
+            benchmark_log10_error=1.08,
+            benchmark_canonical_point=(22.5, 61.0),
+        )
+
+        text = pypdf.PdfReader(io.BytesIO(pdf_bytes)).pages[0].extract_text()
+        for needle in [
+            "Model accuracy at nearest canonical RAM-C point",
+            "M22.5 @ 61 km",
+            "Jones & Cross 1972",
+            "log10 error",
+        ]:
+            assert needle in text, (
+                f"missing attribution text {needle!r} in rendered PDF\n"
+                f"extracted text:\n{text}"
+            )
+
+    def test_build_pdf_omits_attribution_when_canonical_point_missing(self):
+        """When build_pdf is called without benchmark_canonical_point, no
+        attribution block renders (off-grid request path)."""
+        import io
+        import pypdf
+        from plasmanet.pdf_report import build_pdf
+
+        pdf_bytes = build_pdf(
+            meta={
+                "mach": 10.0, "altitude_km": 35.0,
+                "vehicle": "generic", "engine": "plasmanet_nn_mock",
+                "plasmanet_version": "test",
+                "stagnation": {
+                    "T_tr_K": 5000.0, "T_ve_K": None,
+                    "p_Pa": 50000.0, "ne_m3": 1.0e18, "fp_GHz": 9.0,
+                },
+                "uq": None,
+            },
+            frequencies=[{
+                "label": "X-band 9.2 GHz", "frequency_mhz": 9200, "color": "#3b82f6",
+                "aspect_scan": [
+                    {"angle_deg": 0.0,   "attenuation_db": 5.0,  "status": "DEGRADED"},
+                    {"angle_deg": 180.0, "attenuation_db": 3.0,  "status": "DEGRADED"},
+                ],
+            }],
+            station_profile=None,
+            benchmark_log10_error=None,
+            benchmark_canonical_point=None,
+        )
+
+        text = pypdf.PdfReader(io.BytesIO(pdf_bytes)).pages[0].extract_text()
+        assert "Model accuracy at nearest canonical" not in text
+        assert "log10 error" not in text
+
+    def test_resolve_benchmark_error_within_tolerance_returns_canonical_point(self):
+        """Inputs slightly off the canonical point resolve to that point and
+        the returned matched-point tuple is the *canonical* (mach, alt), not
+        the request's. This is what build_pdf's attribution depends on."""
         from plasmanet.mock_server import _resolve_benchmark_error
-        # ±0.1 Mach window
-        assert _resolve_benchmark_error(22.55, 61.0) is not None
-        assert _resolve_benchmark_error(22.45, 61.0) is not None
-        # ±1 km window
-        assert _resolve_benchmark_error(22.5, 61.5) is not None
-        assert _resolve_benchmark_error(22.5, 60.5) is not None
+
+        # ±0.1 Mach window — request is M22.55, canonical is M22.5
+        result = _resolve_benchmark_error(22.55, 61.0)
+        assert result is not None
+        _err, point = result
+        assert point == (22.5, 61.0)
+
+        # ±1 km window — request is 60.5 km, canonical is 61 km
+        result = _resolve_benchmark_error(22.5, 60.5)
+        assert result is not None
+        _err, point = result
+        assert point == (22.5, 61.0)
