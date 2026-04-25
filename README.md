@@ -60,25 +60,27 @@ plasmanet/
 │   ├── mesh_domain()           Gmsh tet mesh with body/farfield tags
 │   └── generate_su2_config()   SU2 Euler config for each condition
 │
-├── extract_cfd_results.py  # Process SU2 VTU output → training data
-│   ├── read_vtu_fields()       meshio reader for binary VTU
-│   ├── find_stagnation_point() Max pressure point
-│   ├── sample_body_surface()   Top 5% pressure points
-│   ├── cantera_postprocess()   Chemistry at each (T,p) point
-│   └── process_all_results()   Batch process → NPZ for training
+├── cfd_field.py            # Full-field CFD extraction (replaces stagnation-only path)
+│   ├── read_vtu_fields()       VTK reader for SU2 binary VTU
+│   ├── extract_nemo_field()    NEMO 2-T two-temperature field extraction
+│   └── build_unstructured_field()  Feed for line_of_sight integrator
 │
-├── serve.py                # FastAPI inference server
-│   ├── GET/POST /predict       Single condition
-│   ├── POST /predict_batch     1000+ conditions
-│   ├── POST /predict_envelope  Mach x altitude grid
-│   └── POST /uncertainty       MC dropout uncertainty
+├── mock_server.py          # Post-audit FastAPI (current canonical server)
+│   ├── POST /api/plasma/analyze         Detectability report (live or mock)
+│   ├── POST /api/plasma/analyze_scan    Multi-frequency scan for the frontend
+│   ├── POST /api/plasma/submit_cfd      Mock 202 for the SU2-NEMO Batch path
+│   ├── POST /api/plasma/report          One-page PDF (reportlab + matplotlib)
+│   └── GET  /api/plasma/benchmark/ram_c RAM-C J&C 1972 self-test table
 │
+├── pdf_report.py           # PDF composition (used by /report)
+├── agent_tools.py          # Pydantic AI tools for KhoriumAgents
 ├── active_learning.py      # Uncertainty-guided data acquisition
 ├── train_loop.py           # Continuous training loop
-├── run_cfd_batch.py        # GCP VM automation for SU2 runs
-│
-├── demo.py                 # Self-contained SBIR demo (browser UI)
 └── Dockerfile              # CPU-only image for SimOps deployment
+
+legacy/                     # Pre-React demo path (kept for reference)
+├── demo.py                 # Standalone SBIR launcher — superseded by frontend/
+└── serve.py                # NN-only FastAPI — superseded by mock_server.py
 
 data/
 ├── training_clean_5k.npz       # CURRENT clean training data (no NEQ correction)
@@ -151,7 +153,7 @@ These are mistakes we caught and fixed. An auditor should verify the fixes are c
 1. **Physics tests**: `python tests/test_physics.py` — all 10 should pass
 2. **E2E tests**: `python tests/test_e2e.py` — model vs Cantera comparison
 3. **DRGEP validation**: `data/drgep_complete_map.json` — check that R2 dominates
-4. **CFD extraction**: `python -m plasmanet.extract_cfd_results` on downloaded VTU files
+4. **CFD extraction**: `from plasmanet.cfd_field import extract_nemo_field` on downloaded VTU files
 5. **Clean training data**: verify `data/training_clean_*.npz` has no NEQ correction (ne values should be raw Cantera equilibrium)
 
 ## Related Documents
@@ -188,18 +190,21 @@ python -m plasmanet.generate_data --n-points 5000 --output data/training_clean.n
 # Train
 python -m plasmanet.model --data data/training_clean_5k.npz --output checkpoints/plasmanet_clean.pt
 
-# Serve
-python -m plasmanet.serve --model checkpoints/plasmanet_clean_v1.pt --port 8100
+# Serve (current SimOps API — FastAPI + Pydantic v2)
+python -m plasmanet.mock_server --port 8200
 
-# Demo (opens browser)
-python demo.py
+# Frontend dev server (separate terminal)
+cd frontend && npm install && npm run dev
 
 # Generate geometries for CFD
 python -m plasmanet.generate_geometries
 
-# Run CFD batch on GCP
-python -m plasmanet.run_cfd_batch --manifest data/cfd_cases/manifest.json
+# RAM-C ramp on GCP VM (Mach 10 -> 22.5 chain)
+bash scripts/ram_c_unified_ramp.sh
 
-# Extract CFD results
-python -m plasmanet.extract_cfd_results --results data/cfd_results
+# Validate NEMO result against Jones & Cross 1972
+python scripts/validate_ram_c_nemo.py --vtu data/nemo_test/<case>.vtu --altitude 61 --mach 22.5
+
+# Pre-React legacy demo (kept under legacy/ — superseded by frontend/)
+python legacy/demo.py
 ```

@@ -243,8 +243,13 @@ def main():
     print(f"  Model: {model_path}")
     print(f"  Port:  {args.port}")
 
-    # Create the app with an extra /demo route serving the HTML
-    from plasmanet.serve import create_app
+    # Create the app with an extra /demo route serving the HTML.
+    # serve.py was moved to legacy/ alongside this file — add legacy/
+    # to sys.path so the import resolves from any cwd.
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent))
+    from serve import create_app  # type: ignore[import-not-found]
     from fastapi.responses import HTMLResponse
 
     app = create_app(model_path)

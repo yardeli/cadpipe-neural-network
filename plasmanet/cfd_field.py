@@ -1,6 +1,6 @@
 """CFD field extraction for LOS-based detectability.
 
-Extends the stagnation-point-only pipeline of extract_cfd_results.py to
+Extends the stagnation-point-only pipeline (legacy extract_cfd_results.py) to
 produce full-field (T, p, ne, ν_c) data suitable for direct consumption
 by line_of_sight.CartesianGridField and line_of_sight.integrate_los().
 

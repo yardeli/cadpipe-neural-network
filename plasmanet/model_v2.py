@@ -155,7 +155,8 @@ def prepare_cfd_data(dataset_path, test_fraction=0.1, val_fraction=0.1, seed=42)
 
 def merge_equilibrium_and_cfd_data(equil_npz_path, cfd_npz_path, output_path):
     """Merge equilibrium training data (from generate_data.py) with
-    CFD-derived training data (from extract_cfd_results.py).
+    CFD-derived training data (from cfd_field.extract_nemo_field for NEMO
+    or the legacy extract_cfd_results.py for Euler).
 
     Adds default geometry columns to equilibrium data that doesn't have them.
     """

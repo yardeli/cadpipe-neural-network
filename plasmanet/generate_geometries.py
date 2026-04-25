@@ -357,7 +357,7 @@ def generate_training_cases(output_dir="data/cfd_cases", n_geometries=5):
     print(f"Time: {elapsed:.0f}s")
     print(f"Manifest: {manifest_path}")
     print(f"\nNext: Upload meshes + configs to GCP and run SU2")
-    print(f"  python -m plasmanet.run_cfd_batch --manifest {manifest_path}")
+    print(f"  bash scripts/run_nemo_batch.sh   # uses {manifest_path}")
 
     return manifest
 
