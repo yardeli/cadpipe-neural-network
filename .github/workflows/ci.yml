@@ -86,3 +86,35 @@ jobs:
             tests/test_pdf_report.py \
             tests/test_agent_tools.py \
             -v
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job 3: frontend — TypeScript build + Vitest RTL tests
+  # ──────────────────────────────────────────────────────────────────────────
+  # Storybook build is intentionally excluded — it's slow (~13 s + downloads)
+  # and not load-bearing.  We'll add it later if/when we host the static
+  # bundle.  Vitest covers the same component graph at much lower CI cost.
+  # ──────────────────────────────────────────────────────────────────────────
+  frontend:
+    name: frontend (build + vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check + production build
+        run: npm run build
+
+      - name: Run Vitest RTL component tests
+        run: npm test
