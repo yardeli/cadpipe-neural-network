@@ -77,8 +77,13 @@ MUSCL_FLOW= NO
 % EULER_IMPLICIT is NOT supported with MUTATIONPP in SU2 v7.5.1
 TIME_DISCRE_FLOW= EULER_EXPLICIT
 
-CONV_RESIDUAL_MINVAL= -6
-CONV_STARTITER= 10
+% CONV_FIELD must monitor a BULK-flow residual for AIR-11 — the default
+% RMS_DENSITY_0 watches electrons, which start at machine zero in the
+% freestream, so Rho_0 is trivially below any threshold until ionization
+% has time to spin up. RMS_MOMENTUM-X tracks shock convergence properly.
+CONV_FIELD= ( RMS_MOMENTUM-X )
+CONV_RESIDUAL_MINVAL= -3
+CONV_STARTITER= 500
 
 MESH_FILENAME= $MESH
 MESH_FORMAT= SU2
