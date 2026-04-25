@@ -1,0 +1,29 @@
+{
+  "_warning": "AUTO-GENERATED. Do not edit by hand. Edit plasmanet/ram_c_trajectory.py and re-run scripts/sync_trajectory_json.py.",
+  "points": [
+    {
+      "altitude_km": 81.0,
+      "mach": 23.9,
+      "ne_peak_m3_published": 2e+18,
+      "source": "Jones & Cross 1972 NASA TN D-6617"
+    },
+    {
+      "altitude_km": 71.0,
+      "mach": 23.6,
+      "ne_peak_m3_published": 1e+19,
+      "source": "Jones & Cross 1972 NASA TN D-6617"
+    },
+    {
+      "altitude_km": 61.0,
+      "mach": 22.5,
+      "ne_peak_m3_published": 2e+19,
+      "source": "Jones & Cross 1972 NASA TN D-6617 (primary validation point)"
+    },
+    {
+      "altitude_km": 47.0,
+      "mach": 18.5,
+      "ne_peak_m3_published": 2e+19,
+      "source": "Jones & Cross 1972 NASA TN D-6617"
+    }
+  ]
+}

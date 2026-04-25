@@ -2,18 +2,31 @@
  * FlightSelectors — Mach + altitude pill rows that drive the analyze_scan
  * fetch in App.tsx.
  *
- * The option set is fixed to the four RAM-C II reflectometer trajectory
- * points (Jones & Cross 1972). Defaults at the call site should pick the
- * J&C primary validation point (M22.5 / 61 km).
+ * Option grids are derived from frontend/src/data/ram_c_trajectory.json,
+ * which is auto-generated from plasmanet/ram_c_trajectory.py by
+ * scripts/sync_trajectory_json.py — single source of truth shared with
+ * the PDF report and the benchmark route.
  */
 
-// RAM-C II Jones & Cross 1972 instrumentation grid — same numbers used by
-// the /report PDF's CANONICAL_RAMC_POINTS.
-export const ALTITUDE_OPTIONS_KM = [47, 61, 71, 81] as const;
-export const MACH_OPTIONS = [18.5, 22.5, 23.6, 23.9] as const;
+import trajectoryData from "@/data/ram_c_trajectory.json";
 
-export type AltitudeKm = (typeof ALTITUDE_OPTIONS_KM)[number];
-export type MachOption = (typeof MACH_OPTIONS)[number];
+export interface TrajectoryPoint {
+  altitude_km: number;
+  mach: number;
+  ne_peak_m3_published: number;
+  source: string;
+}
+
+const POINTS: TrajectoryPoint[] = trajectoryData.points;
+
+// Distinct, ascending values — matches plasmanet.ram_c_trajectory.trajectory_*().
+export const ALTITUDE_OPTIONS_KM: number[] = Array.from(
+  new Set(POINTS.map((p) => p.altitude_km))
+).sort((a, b) => a - b);
+
+export const MACH_OPTIONS: number[] = Array.from(
+  new Set(POINTS.map((p) => p.mach))
+).sort((a, b) => a - b);
 
 interface Props {
   mach: number;
@@ -46,21 +59,21 @@ export function FlightSelectors({ mach, alt, onMachChange, onAltChange }: Props)
   );
 }
 
-interface SelectorRowProps<T extends number> {
+interface SelectorRowProps {
   label: string;
-  value: T;
-  options: readonly T[];
-  format: (v: T) => string;
-  onChange: (v: T) => void;
+  value: number;
+  options: number[];
+  format: (v: number) => string;
+  onChange: (v: number) => void;
 }
 
-function SelectorRow<T extends number>({
+function SelectorRow({
   label,
   value,
   options,
   format,
   onChange,
-}: SelectorRowProps<T>) {
+}: SelectorRowProps) {
   return (
     <div className="flex items-center gap-2" role="radiogroup" aria-label={label}>
       <span className="text-xs font-medium text-muted-foreground">{label}</span>

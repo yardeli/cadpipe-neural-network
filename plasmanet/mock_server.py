@@ -479,7 +479,7 @@ def _resolve_benchmark_error(
     Returns None when outside tolerance, so the PDF Validation section
     stays hidden.
     """
-    from .pdf_report import find_canonical_match
+    from .ram_c_trajectory import find_canonical_match
     match = find_canonical_match(mach, altitude_km)
     if match is None:
         return None
