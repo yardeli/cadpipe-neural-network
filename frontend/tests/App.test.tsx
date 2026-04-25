@@ -113,6 +113,32 @@ describe("App", () => {
     expect(body.flight.mach).toBe(18.5);
   });
 
+  it("UQ toggle exposes role=switch with aria-labelledby + aria-checked", async () => {
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByTestId("live-mock-badge")).toHaveAttribute(
+        "data-source", "live"
+      );
+    });
+    const uqToggle = screen.getByRole("switch", { name: /UQ band/i });
+    // Default UQ on (showUQ initial state is true).
+    expect(uqToggle).toHaveAttribute("aria-checked", "true");
+    await userEvent.click(uqToggle);
+    expect(uqToggle).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("frequency toggle buttons report toggle state via aria-pressed", async () => {
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByTestId("live-mock-badge")).toHaveAttribute(
+        "data-source", "live"
+      );
+    });
+    // All bands start visible; aria-pressed should be true on each.
+    const buttons = screen.getAllByRole("button", { pressed: true });
+    expect(buttons.length).toBeGreaterThanOrEqual(staticMock.frequencies.length);
+  });
+
   it("refetches with new altitude when an Altitude pill is clicked", async () => {
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")

@@ -274,6 +274,14 @@ export function LOSPolarPlot({
         height={height}
         className="overflow-visible"
         style={{ maxWidth: "100%" }}
+        role="img"
+        aria-label={
+          `Line-of-sight radar attenuation polar plot. ` +
+          `${visible.length} of ${data.frequencies.length} frequency bands shown ` +
+          `between 0 and 180 degrees aspect angle. ` +
+          `Stagnation electron density ${meta.stagnation.ne_m3.toExponential(1)} m^-3, ` +
+          `plasma frequency ${meta.stagnation.fp_GHz.toFixed(1)} GHz.`
+        }
       >
         <PolarGrid cx={cx} cy={cy} maxRadius={maxRadius} maxDb={maxDb} />
 

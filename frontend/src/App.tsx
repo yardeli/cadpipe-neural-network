@@ -126,23 +126,35 @@ export default function App() {
           <span className="text-xs font-medium text-muted-foreground">
             Frequencies:
           </span>
-          {data.frequencies.map((f, i) => (
-            <button
-              key={f.label}
-              onClick={() => toggleFreq(i)}
-              className={[
-                "rounded-full px-3 py-1 text-xs font-medium transition-colors",
-                visibleFreqs.includes(i)
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80",
-              ].join(" ")}
-            >
-              {f.label}
-            </button>
-          ))}
+          {data.frequencies.map((f, i) => {
+            const visible = visibleFreqs.includes(i);
+            return (
+              <button
+                key={f.label}
+                type="button"
+                aria-pressed={visible}
+                aria-label={`Toggle ${f.label} ${visible ? "off" : "on"}`}
+                onClick={() => toggleFreq(i)}
+                className={[
+                  "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                  visible
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80",
+                ].join(" ")}
+              >
+                {f.label}
+              </button>
+            );
+          })}
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">UQ band</span>
+            <span id="uq-toggle-label" className="text-xs text-muted-foreground">
+              UQ band
+            </span>
             <button
+              type="button"
+              role="switch"
+              aria-checked={showUQ}
+              aria-labelledby="uq-toggle-label"
               onClick={() => setShowUQ((v) => !v)}
               className={[
                 "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
@@ -150,6 +162,7 @@ export default function App() {
               ].join(" ")}
             >
               <span
+                aria-hidden="true"
                 className={[
                   "inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform",
                   showUQ ? "translate-x-4" : "translate-x-1",
