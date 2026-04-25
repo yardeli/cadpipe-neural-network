@@ -138,3 +138,54 @@ jobs:
 
       - name: Run Vitest RTL component tests
         run: npm test
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job 4: build-storybook — publish the static bundle to GitHub Pages
+  # ──────────────────────────────────────────────────────────────────────────
+  # Runs only on master pushes (skipped on PRs to avoid clobbering Pages with
+  # in-flight branch work). Reviewer / boss can poke at components without
+  # cloning the repo: https://yardeli.github.io/cadpipe-neural-network/
+  # ──────────────────────────────────────────────────────────────────────────
+  build-storybook:
+    name: build-storybook (deploy to Pages)
+    needs: frontend
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Storybook static bundle
+        run: npm run build-storybook
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/storybook-static
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
