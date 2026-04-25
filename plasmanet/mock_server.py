@@ -589,6 +589,26 @@ def _build_benchmark() -> RamCBenchmarkResponse:
     )
 
 
+def _resolve_benchmark_error(mach: float, altitude_km: float) -> Optional[float]:
+    """Return the RAM-C benchmark log10 error for the canonical trajectory
+    point matching (mach, altitude_km), or None if outside tolerance.
+
+    Drives the auto-fill of the PDF report's Validation section.
+    Extracted as a module-level helper so the dispatch logic is unit-testable
+    without rendering the full PDF.
+    """
+    from .pdf_report import find_canonical_match
+    match = find_canonical_match(mach, altitude_km)
+    if match is None:
+        return None
+    _matched_mach, matched_alt = match
+    bench = _build_benchmark()
+    for case in bench.cases:
+        if abs(case.altitude_km - matched_alt) < 0.5:
+            return case.log10_error
+    return None
+
+
 def _compute_scan_data(req: "MultiFreqScanRequest") -> dict:
     """Build the LOSData-shaped dict served by /analyze_scan and used by /report.
 
@@ -765,6 +785,11 @@ def create_app() -> "FastAPI":
         Stand-alone artifact for SBIR review and async sharing — bundles the
         polar attenuation chart, station n_e profile, stagnation summary,
         per-band detection table, UQ band, and footer with references.
+
+        When the requested (mach, altitude) matches a canonical RAM-C II
+        trajectory point (±0.1 Mach, ±1 km), the Validation section is
+        populated automatically by calling the underlying RAM-C benchmark
+        and pulling the matching case's log10_error.
         """
         from fastapi.responses import Response
         from .pdf_report import build_pdf
@@ -777,11 +802,17 @@ def create_app() -> "FastAPI":
         )
         scan = _compute_scan_data(scan_req)
 
+        # Auto-fill the Validation section when the flight condition matches
+        # a published J&C 1972 trajectory point (±0.1 Mach, ±1 km).
+        benchmark_log10_error = _resolve_benchmark_error(
+            req.flight.mach, req.flight.altitude_km
+        )
+
         pdf_bytes = build_pdf(
             meta=scan["meta"],
             frequencies=scan["frequencies"],
             station_profile=scan["meta"].get("station_profile"),
-            benchmark_log10_error=None,
+            benchmark_log10_error=benchmark_log10_error,
         )
         filename = (
             f"plasmanet_M{req.flight.mach:.1f}_"

@@ -79,3 +79,102 @@ class TestReportRoute:
         body = _report_req()
         del body["radar"]
         assert client.post("/api/plasma/report", json=body).status_code == 422
+
+
+# ── Canonical RAM-C trajectory point matching ────────────────────────────────
+
+class TestCanonicalMatching:
+    """find_canonical_match() — the tolerance check that decides whether the
+    PDF Validation section auto-populates."""
+
+    def test_exact_match_returns_point(self):
+        from plasmanet.pdf_report import find_canonical_match
+        assert find_canonical_match(22.5, 61.0) == (22.5, 61.0)
+        assert find_canonical_match(23.9, 81.0) == (23.9, 81.0)
+
+    def test_within_mach_tolerance(self):
+        from plasmanet.pdf_report import find_canonical_match
+        assert find_canonical_match(22.55, 61.0) == (22.5, 61.0)
+        assert find_canonical_match(22.45, 61.0) == (22.5, 61.0)
+
+    def test_within_altitude_tolerance(self):
+        from plasmanet.pdf_report import find_canonical_match
+        assert find_canonical_match(22.5, 61.5) == (22.5, 61.0)
+        assert find_canonical_match(22.5, 60.5) == (22.5, 61.0)
+
+    def test_outside_tolerance_returns_none(self):
+        from plasmanet.pdf_report import find_canonical_match
+        # Wrong Mach
+        assert find_canonical_match(10.0, 61.0) is None
+        # Wrong altitude
+        assert find_canonical_match(22.5, 35.0) is None
+        # Just outside Mach window
+        assert find_canonical_match(22.7, 61.0) is None
+        # Just outside altitude window
+        assert find_canonical_match(22.5, 62.5) is None
+
+    def test_canonical_points_dict_complete(self):
+        from plasmanet.pdf_report import CANONICAL_RAMC_POINTS
+        # Four trajectory points from Jones & Cross 1972
+        assert (23.9, 81.0) in CANONICAL_RAMC_POINTS
+        assert (23.6, 71.0) in CANONICAL_RAMC_POINTS
+        assert (22.5, 61.0) in CANONICAL_RAMC_POINTS
+        assert (18.5, 47.0) in CANONICAL_RAMC_POINTS
+        assert len(CANONICAL_RAMC_POINTS) == 4
+
+
+# ── Validation section auto-population ────────────────────────────────────────
+
+class TestValidationSectionAutofill:
+    """The /report route auto-fills the Validation section at canonical points."""
+
+    def _post_at(self, mach: float, alt: float) -> bytes:
+        body = {
+            "vehicle": {"nose_radius_m": 0.1524, "half_angle_deg": 9.0,
+                        "length_m": 1.295, "name": "ram_c"},
+            "flight": {"mach": mach, "altitude_km": alt},
+            "radar": {"frequency_hz": 9.2e9,
+                      "aspect_angles_deg": [0.0, 90.0, 180.0]},
+            "uncertainty": {"enabled": True, "n_samples": 8},
+        }
+        resp = client.post("/api/plasma/report", json=body)
+        assert resp.status_code == 200
+        return resp.content
+
+    def test_canonical_point_pdf_well_formed(self):
+        """At every canonical point the route still produces a valid PDF."""
+        for mach, alt in [(23.9, 81.0), (23.6, 71.0), (22.5, 61.0), (18.5, 47.0)]:
+            content = self._post_at(mach, alt)
+            assert content[:5] == b"%PDF-", f"bad PDF magic at M{mach}/{alt}km"
+            assert content.rstrip(b"\r\n").endswith(b"%%EOF"), (
+                f"missing %%EOF at M{mach}/{alt}km"
+            )
+
+    def test_resolve_benchmark_error_canonical_returns_float(self):
+        """At every canonical trajectory point the dispatcher returns a float
+        log10_error pulled from the RAM-C benchmark."""
+        from plasmanet.mock_server import _resolve_benchmark_error
+        for mach, alt in [(23.9, 81.0), (23.6, 71.0), (22.5, 61.0), (18.5, 47.0)]:
+            err = _resolve_benchmark_error(mach, alt)
+            assert err is not None, f"None at canonical M{mach}/{alt}km"
+            assert isinstance(err, (int, float))
+
+    def test_resolve_benchmark_error_off_grid_returns_none(self):
+        """Outside the ±0.1 Mach / ±1 km window the dispatcher returns None
+        so build_pdf hides the Validation section."""
+        from plasmanet.mock_server import _resolve_benchmark_error
+        assert _resolve_benchmark_error(10.0, 35.0) is None
+        assert _resolve_benchmark_error(22.5, 50.0) is None      # wrong altitude
+        assert _resolve_benchmark_error(15.0, 61.0) is None      # wrong Mach
+        assert _resolve_benchmark_error(22.7, 61.0) is None      # just-outside Mach
+        assert _resolve_benchmark_error(22.5, 62.5) is None      # just-outside alt
+
+    def test_resolve_benchmark_error_within_tolerance(self):
+        """Inputs slightly off the canonical point still resolve to that point."""
+        from plasmanet.mock_server import _resolve_benchmark_error
+        # ±0.1 Mach window
+        assert _resolve_benchmark_error(22.55, 61.0) is not None
+        assert _resolve_benchmark_error(22.45, 61.0) is not None
+        # ±1 km window
+        assert _resolve_benchmark_error(22.5, 61.5) is not None
+        assert _resolve_benchmark_error(22.5, 60.5) is not None

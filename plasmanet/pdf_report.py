@@ -29,6 +29,40 @@ from typing import Optional
 PLASMANET_VERSION = "0.3.0"
 
 
+# ── Canonical RAM-C II trajectory points ──────────────────────────────────────
+# Published peak n_e (electrons/m³) from Jones & Cross 1972 (NASA TN D-6617)
+# at the four reflectometer instrumentation altitudes. Used by /api/plasma/report
+# to auto-populate the Validation section when the request flight condition
+# is within tolerance of one of these points.
+#
+# Key: (mach, altitude_km) → reference peak n_e (m⁻³)
+CANONICAL_RAMC_POINTS: dict[tuple[float, float], float] = {
+    (23.9, 81.0): 2.0e18,
+    (23.6, 71.0): 1.0e19,
+    (22.5, 61.0): 2.0e19,
+    (18.5, 47.0): 2.0e19,
+}
+
+
+def find_canonical_match(
+    mach: float,
+    altitude_km: float,
+    *,
+    mach_tol: float = 0.1,
+    alt_tol_km: float = 1.0,
+) -> tuple[float, float] | None:
+    """Return the closest canonical RAM-C trajectory point within tolerance.
+
+    Returns None when (mach, altitude_km) is outside ±0.1 Mach and ±1 km of
+    every canonical entry — caller should pass benchmark_log10_error=None
+    so the PDF's Validation section stays hidden.
+    """
+    for (m, a) in CANONICAL_RAMC_POINTS:
+        if abs(m - mach) <= mach_tol and abs(a - altitude_km) <= alt_tol_km:
+            return (m, a)
+    return None
+
+
 # ── Chart helpers ─────────────────────────────────────────────────────────────
 
 def _polar_chart_png(frequencies: list[dict]) -> bytes:
