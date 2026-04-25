@@ -40,15 +40,37 @@ from pathlib import Path
 from typing import Optional
 
 # ── Pydantic request / response models ────────────────────────────────────────
-# These mirror the types defined in docs/SIMOPS_INTEGRATION.md exactly.
-# Changes here must be reflected there (and vice-versa).
+# All models live in plasmanet/api_models.py — single source of truth shared
+# with pdf_report.py, agent_tools.py, and the contract tests.  Re-imported
+# here (with `from … import *`) so existing
+# `from plasmanet.mock_server import VehicleGeometry`
+# imports still resolve.
 
 try:
-    from pydantic import BaseModel, Field
+    from pydantic import BaseModel  # noqa: F401  (some older callers reach for this here)
 except ImportError:
     raise SystemExit("pydantic is required: pip install pydantic")
 
-PLASMANET_VERSION = "0.3.0"
+from .api_models import *  # noqa: F401,F403 — re-export for backward compat
+from . import api_models as _api_models
+from .api_models import (
+    PLASMANET_VERSION,
+    VehicleGeometry,
+    FlightCondition,
+    RadarParams,
+    UQConfig,
+    PlasmaAnalysisParams,
+    PlasmaAnalyzeRequest,
+    PlasmaSubmitCFDRequest,
+    MultiFreqScanRequest,
+    StagnationState,
+    UQBand,
+    AspectResult,
+    DetectabilityResponse,
+    SubmitCFDResponse,
+    RamCCaseResult,
+    RamCBenchmarkResponse,
+)
 
 # Path to the NEMO validation result JSON — single source of truth for
 # benchmark and fallback mock data.
@@ -110,155 +132,9 @@ def _resolve_model_s3_key() -> str:
 #: Resolved at import time — available to request handlers that load the model.
 MODEL_S3_KEY: str = _resolve_model_s3_key()
 
-# ── Request models ─────────────────────────────────────────────────────────────
-
-class VehicleGeometry(BaseModel):
-    nose_radius_m: float = Field(0.08, gt=0)
-    half_angle_deg: float = Field(15.0, ge=0, le=90)
-    length_m: float = Field(2.5, gt=0)
-    name: str = "generic_spherecone"
-
-
-class FlightCondition(BaseModel):
-    mach: float = Field(..., ge=1, le=30)
-    altitude_km: float = Field(..., ge=10, le=120)
-    sideslip_angle_deg: float = 0.0
-
-
-class RadarParams(BaseModel):
-    frequency_hz: float = Field(12e9, gt=0)
-    aspect_angles_deg: Optional[list[float]] = None   # None → default 0–180° every 30°
-
-
-class UQConfig(BaseModel):
-    enabled: bool = True
-    n_samples: int = Field(64, ge=1, le=512)
-
-
-class PlasmaAnalysisParams(BaseModel):
-    """CFD job plasma settings — mirrors SIMOPS_INTEGRATION.md PlasmaAnalysisParams."""
-    gas_model: str = "air_5"              # "air_5" | "air_11"
-    radar_frequency_hz: float = 12e9
-    aspect_angles: Optional[list[float]] = None   # None → default 0–180° every 30°
-    include_uq: bool = True
-
-
-class PlasmaAnalyzeRequest(BaseModel):
-    vehicle: VehicleGeometry              # required — no default
-    flight: FlightCondition               # required
-    radar: RadarParams                    # required — no default
-    uncertainty: UQConfig                 # required — no default
-
-
-class PlasmaSubmitCFDRequest(BaseModel):
-    mesh_id: str                          # UUID string (no actual DB lookup in mock)
-    flight: FlightCondition
-    plasma: PlasmaAnalysisParams          # required — typed, not Optional[dict]
-    solver: str = "su2_nemo"
-
-
-class MultiFreqScanRequest(BaseModel):
-    """Convenience request for the frontend — analyzes all four standard
-    frequency bands in one call and returns LOSData-shaped JSON."""
-    vehicle: VehicleGeometry = Field(default_factory=VehicleGeometry)
-    flight: FlightCondition
-    aspect_angles_deg: Optional[list[float]] = None
-    uncertainty: UQConfig = Field(default_factory=UQConfig)
-
-
-# ── Response models ────────────────────────────────────────────────────────────
-
-class StagnationState(BaseModel):
-    T_tr_K: float
-    T_ve_K: Optional[float] = None
-    p_Pa: float
-    ne_m3: float
-    fp_GHz: float
-
-
-class UQBand(BaseModel):
-    ne_P05_m3: float
-    ne_P50_m3: float
-    ne_P95_m3: float
-    log10_ne_std: float
-
-
-class AspectResult(BaseModel):
-    angle_deg: float
-    attenuation_db: float
-    status: str
-
-
-class DetectabilityResponse(BaseModel):
-    stagnation: StagnationState
-    uq: Optional[UQBand] = None
-    aspect_scan: list[AspectResult]
-    overall_status: str
-    worst_case: AspectResult
-    runtime_seconds: float
-    plasmanet_version: str = PLASMANET_VERSION
-    engine: str = "plasmanet_nn"
-
-
-class SubmitCFDResponse(BaseModel):
-    simulation_id: str
-    batch_job_id: str
-    status: str = "queued"
-    estimated_runtime_minutes: int
-
-
-class RamCCaseResult(BaseModel):
-    model_config = {"populate_by_name": True}
-
-    altitude_km: float
-    mach: float
-    frequency_ghz: float
-    ne_predicted_m3: float
-    ne_reference_m3: float
-    log10_error: float
-    status_match: bool = Field(alias="within_uncertainty")
-    source: str
-
-
-class RamCBenchmarkResponse(BaseModel):
-    generated_at: str
-    nemo_case_source: str
-    cases: list[RamCCaseResult]
-    summary: dict
-
-
-# Aliases matching SIMOPS_INTEGRATION.md class names exactly.
-# Keeps the internal names stable while making the doc names importable.
-DetectabilityReport = DetectabilityResponse      # doc: DetectabilityReport
-PlasmaSubmitCFDResponse = SubmitCFDResponse      # doc: PlasmaSubmitCFDResponse
-RamCBenchmarkResult = RamCBenchmarkResponse      # doc: RamCBenchmarkResult
-
-__all__ = [
-    # Request models
-    "VehicleGeometry",
-    "FlightCondition",
-    "RadarParams",
-    "UQConfig",
-    "PlasmaAnalysisParams",
-    "PlasmaAnalyzeRequest",
-    "PlasmaSubmitCFDRequest",
-    "MultiFreqScanRequest",
-    # Response models (internal names)
-    "StagnationState",
-    "UQBand",
-    "AspectResult",
-    "DetectabilityResponse",
-    "SubmitCFDResponse",
-    "RamCCaseResult",
-    "RamCBenchmarkResponse",
-    # Response model aliases matching SIMOPS_INTEGRATION.md
-    "DetectabilityReport",
-    "PlasmaSubmitCFDResponse",
-    "RamCBenchmarkResult",
-    # Public API
-    "PLASMANET_VERSION",
-    "create_app",
-]
+# Models live in plasmanet/api_models.py and were re-imported above.
+# __all__ extends api_models.__all__ with this module's public surface.
+__all__ = list(_api_models.__all__) + ["create_app"]
 
 # ── Physics helpers ────────────────────────────────────────────────────────────
 
