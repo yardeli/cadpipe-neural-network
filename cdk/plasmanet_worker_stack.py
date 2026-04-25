@@ -331,6 +331,17 @@ class PlasmaNetWorkerStack(cdk.Stack):
             principal=iam.ServicePrincipal("events.amazonaws.com"),
         )
 
+        # batch:DescribeJobs for the Lambda's fallback simulation_id resolution
+        # path (when jobName is not a UUID).  Resource-level permissions are
+        # not supported for this action, so the resource is "*".
+        webhook_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=["batch:DescribeJobs"],
+                resources=["*"],
+            )
+        )
+
         # Rule: fire on SUCCEEDED or FAILED state changes for this job queue.
         completion_rule = events.Rule(
             self,
