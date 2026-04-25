@@ -1,3 +1,10 @@
+/**
+ * / — Live LOS detectability dashboard.
+ *
+ * Was previously the entire App.tsx; the routing migration moved it here
+ * unchanged except for dropping the outer min-h-screen wrapper (RootLayout
+ * owns that now) and the duplicate page header (also in RootLayout).
+ */
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { LOSPolarPlot } from "@/components/LOSPolarPlot";
@@ -9,7 +16,6 @@ import type { LOSData, MultiFreqScanRequest } from "@/types/los";
 
 const MOCK_SERVER = "http://localhost:8200";
 
-// Default to the J&C primary validation point (M22.5 / 61 km).
 const DEFAULT_MACH = 22.5;
 const DEFAULT_ALT = 61;
 
@@ -24,7 +30,7 @@ const DEFAULT_ANGLES = [
   0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180,
 ] as const;
 
-export default function App() {
+export default function HomePage() {
   const [mach, setMach] = useState<number>(DEFAULT_MACH);
   const [alt, setAlt] = useState<number>(DEFAULT_ALT);
 
@@ -56,7 +62,6 @@ export default function App() {
         if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
         const live = (await res.json()) as LOSData;
         validateLOSData(live);
-
         if (!cancelled) {
           setData(live);
           setVisibleFreqs(live.frequencies.map((_, i) => i));
@@ -64,14 +69,12 @@ export default function App() {
         }
       } catch (err) {
         if (cancelled) return;
-
         const msg = err instanceof Error ? err.message : String(err);
         const isFetchFailure =
           msg.includes("Failed to fetch") ||
           msg.includes("NetworkError") ||
           msg.includes("timeout") ||
           msg.includes("AbortError");
-
         if (isFetchFailure) {
           const fallback = staticMock as unknown as LOSData;
           setData(fallback);
@@ -97,14 +100,11 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-6">
+    <div className="p-6">
       <div className="mx-auto max-w-3xl space-y-6">
-        {/* Page header */}
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-bold tracking-tight">
-              PlasmaNet — Detection Dashboard
-            </h1>
+            <h1 className="text-xl font-bold tracking-tight">Analyze</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Aspect-resolved LOS radar attenuation
             </p>
@@ -121,7 +121,6 @@ export default function App() {
 
         {source === "error" && <ErrorBanner message={errorMsg} />}
 
-        {/* Frequency / UQ controls */}
         <div className="flex flex-wrap gap-3 items-center rounded-lg border border-border bg-card p-3">
           <span className="text-xs font-medium text-muted-foreground">
             Frequencies:
@@ -274,8 +273,6 @@ export default function App() {
     </div>
   );
 }
-
-// ── Helpers (kept inline — small, single-use) ────────────────────────────────
 
 function validateLOSData(d: unknown): asserts d is LOSData {
   if (!d || typeof d !== "object") throw new Error("response is not an object");

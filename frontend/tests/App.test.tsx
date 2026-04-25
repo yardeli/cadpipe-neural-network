@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import App from "@/App";
+// App.tsx was renamed to src/routes/index.tsx in the Tanstack Router
+// migration; tests still hit the same component via its new path.
+import App from "@/routes/index";
 import staticMock from "@/data/mock_los.json";
 
 // Build a fresh mock response each time so per-test mutations don't bleed.
@@ -26,7 +28,9 @@ describe("App", () => {
   it("shows the page header on initial render", async () => {
     render(<App />);
     expect(
-      screen.getByRole("heading", { name: /PlasmaNet — Detection Dashboard/i })
+      // Heading was renamed from "PlasmaNet — Detection Dashboard" to
+      // "Analyze" when the project header moved into RootLayout's nav.
+      screen.getByRole("heading", { name: /Analyze/i })
     ).toBeInTheDocument();
   });
 

@@ -115,3 +115,32 @@ export interface LOSData {
   frequencies: FrequencyBand[];
   uq_band?: UQBand;
 }
+
+// ── /api/plasma/benchmark/ram_c response ─────────────────────────────────────
+
+export interface RamCCase {
+  altitude_km: number;
+  mach: number;
+  frequency_ghz: number;
+  ne_predicted_m3: number;
+  ne_reference_m3: number;
+  log10_error: number;
+  /** Wire field name — Pydantic alias of status_match. */
+  within_uncertainty: boolean;
+  source: string;
+}
+
+export interface RamCBenchmarkSummary {
+  total_cases: number;
+  pass_count: number;
+  fail_count: number;
+  max_log10_error: number;
+  note?: string;
+}
+
+export interface RamCBenchmarkResponse {
+  generated_at: string;
+  nemo_case_source: string;
+  cases: RamCCase[];
+  summary: RamCBenchmarkSummary;
+}

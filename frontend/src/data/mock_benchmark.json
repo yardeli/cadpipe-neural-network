@@ -1,0 +1,25 @@
+{
+  "generated_at": "2026-04-25T00:00:00+00:00",
+  "nemo_case_source": "static fallback (mock_server unreachable)",
+  "summary": {
+    "total_cases": 12,
+    "pass_count": 6,
+    "fail_count": 6,
+    "max_log10_error": 1.18,
+    "note": "pass = |log10_error| < 0.5 (within factor 3.2 of reference)"
+  },
+  "cases": [
+    { "altitude_km": 81.0, "mach": 23.9, "frequency_ghz": 0.225, "ne_predicted_m3": 2.63e18, "ne_reference_m3": 2.0e18, "log10_error":  0.120, "within_uncertainty": true,  "source": "equilibrium_cantera" },
+    { "altitude_km": 81.0, "mach": 23.9, "frequency_ghz": 0.450, "ne_predicted_m3": 2.63e18, "ne_reference_m3": 2.0e18, "log10_error":  0.120, "within_uncertainty": true,  "source": "equilibrium_cantera" },
+    { "altitude_km": 81.0, "mach": 23.9, "frequency_ghz": 9.21,  "ne_predicted_m3": 2.63e18, "ne_reference_m3": 2.0e18, "log10_error":  0.120, "within_uncertainty": true,  "source": "equilibrium_cantera" },
+    { "altitude_km": 71.0, "mach": 23.6, "frequency_ghz": 0.225, "ne_predicted_m3": 1.79e19, "ne_reference_m3": 1.0e19, "log10_error":  0.253, "within_uncertainty": true,  "source": "equilibrium_cantera" },
+    { "altitude_km": 71.0, "mach": 23.6, "frequency_ghz": 0.450, "ne_predicted_m3": 1.79e19, "ne_reference_m3": 1.0e19, "log10_error":  0.253, "within_uncertainty": true,  "source": "equilibrium_cantera" },
+    { "altitude_km": 71.0, "mach": 23.6, "frequency_ghz": 9.21,  "ne_predicted_m3": 1.79e19, "ne_reference_m3": 1.0e19, "log10_error":  0.253, "within_uncertainty": true,  "source": "equilibrium_cantera" },
+    { "altitude_km": 61.0, "mach": 22.5, "frequency_ghz": 0.225, "ne_predicted_m3": 2.41e20, "ne_reference_m3": 2.0e19, "log10_error":  1.080, "within_uncertainty": false, "source": "su2_nemo" },
+    { "altitude_km": 61.0, "mach": 22.5, "frequency_ghz": 0.450, "ne_predicted_m3": 2.41e20, "ne_reference_m3": 2.0e19, "log10_error":  1.080, "within_uncertainty": false, "source": "su2_nemo" },
+    { "altitude_km": 61.0, "mach": 22.5, "frequency_ghz": 9.21,  "ne_predicted_m3": 2.41e20, "ne_reference_m3": 2.0e19, "log10_error":  1.080, "within_uncertainty": false, "source": "su2_nemo" },
+    { "altitude_km": 47.0, "mach": 18.5, "frequency_ghz": 0.225, "ne_predicted_m3": 3.04e20, "ne_reference_m3": 2.0e19, "log10_error":  1.182, "within_uncertainty": false, "source": "equilibrium_cantera" },
+    { "altitude_km": 47.0, "mach": 18.5, "frequency_ghz": 0.450, "ne_predicted_m3": 3.04e20, "ne_reference_m3": 2.0e19, "log10_error":  1.182, "within_uncertainty": false, "source": "equilibrium_cantera" },
+    { "altitude_km": 47.0, "mach": 18.5, "frequency_ghz": 9.21,  "ne_predicted_m3": 3.04e20, "ne_reference_m3": 2.0e19, "log10_error":  1.182, "within_uncertainty": false, "source": "equilibrium_cantera" }
+  ]
+}
