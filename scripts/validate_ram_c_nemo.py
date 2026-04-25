@@ -67,6 +67,59 @@ def ram_c_body_radius_at_x(x_m: float) -> float:
     return r_tang + (x_m - x_tang) * math.tan(half)
 
 
+# Detection-status thresholds (dB). These are the conventional bin edges used
+# in the RAM-C reflectometer literature: signals attenuated < 2 dB are
+# detectable on conventional radar; 2-20 dB is degraded but recoverable;
+# > 20 dB is operationally blackout. Used by F-7 to convert qualitative
+# J&C "BLACKOUT/DEGRADED/DETECTABLE" labels into quantitative margins.
+DETECTABLE_MAX_DB = 2.0
+DEGRADED_MAX_DB = 20.0
+
+
+def db_margin_to_published(predicted_db: float, published_status: str
+                            ) -> tuple[float, str]:
+    """Compute how far predicted_db is INSIDE the published status band.
+
+    Returns (margin_db, verdict). A POSITIVE margin means the prediction
+    is comfortably inside the published band; NEGATIVE means it would be
+    classified differently from what J&C observed.
+
+    For BLACKOUT (J&C): margin = predicted_db - 20.0
+        +50 dB margin = solidly blackout
+        +0.1 dB     = right at threshold
+        -10 dB      = WE predict only 10 dB attenuation but they observed blackout
+
+    For DEGRADED (2-20 dB): margin = min(predicted_db - 2.0, 20.0 - predicted_db)
+        +9 dB margin = solidly mid-band (predicted ~11 dB)
+        0           = at one of the edges
+
+    For DETECTABLE (<2 dB): margin = 2.0 - predicted_db
+        +1.9 dB     = solidly detectable (~0.1 dB attenuation)
+        -10 dB      = WE predict 12 dB but they detected the signal cleanly
+
+    Verdict tags:  CONSISTENT (margin > 0 by >= 1 dB inside band)
+                   BORDERLINE (|margin| <= 1 dB, near threshold)
+                   INCONSISTENT (margin < -1 dB, prediction in wrong band)
+    """
+    if published_status == "BLACKOUT":
+        margin = predicted_db - DEGRADED_MAX_DB
+    elif published_status == "DEGRADED":
+        margin = min(predicted_db - DETECTABLE_MAX_DB,
+                     DEGRADED_MAX_DB - predicted_db)
+    elif published_status == "DETECTABLE":
+        margin = DETECTABLE_MAX_DB - predicted_db
+    else:
+        return (0.0, "n/a")
+
+    if margin >= 1.0:
+        verdict = "CONSISTENT"
+    elif margin >= -1.0:
+        verdict = "BORDERLINE"
+    else:
+        verdict = "INCONSISTENT"
+    return (margin, verdict)
+
+
 def status_for_alt(alt_km: float, freq_hz: float) -> str:
     """Published Jones & Cross observed status at the four altitudes."""
     tbl = {
@@ -233,9 +286,78 @@ def main():
         print(f"\nHeadline comparison vs J&C 1972: ne is ZERO at every "
               f"reflectometer station — sheath unresolved, can't compare.")
 
-    # Step 4: Line-of-sight attenuation at the three RAM-C reflectometer
-    # frequencies (VHF 225, VHF 450, X-band 9.2 GHz) plus Ku-band
-    print(f"\nLOS aspect scan attenuation at RAM-C reflectometer frequencies:")
+    # Step 4a: Reflectometer-style attenuation — apples-to-apples vs
+    # Grantham 1970. The actual RAM-C reflectometers were body-mounted
+    # antennas at fixed stations transmitting outward. Their measurement
+    # was attenuation through the LOCAL SHEATH at each station, NOT the
+    # column through the bow shock + stagnation. Computing it that way:
+    print(f"\nReflectometer-style attenuation per station (radial outward "
+          f"through local sheath):")
+    print(f"  {'station':>8} {'freq':>10} {'sheath ne':>11} {'L_sheath':>9} "
+          f"{'atten':>8} {'pub':>10} {'margin':>8} {'verdict':>14}")
+
+    from plasmanet.plasma_wave import attenuation_rate_db_per_m
+    from plasmanet.collision_frequency import nu_total
+
+    # Standard atmosphere at 61 km (matches the freestream cfg constants)
+    p_inf_61 = 253.7116
+    T_inf_61 = 242.65
+    # Estimated post-shock neutral densities at the sheath stations (rough —
+    # post-shock compression ~6x at M22, partial dissociation reduces N2/O2
+    # by ~30%). For the attenuation calc, ν is dominated by ν_ei (electron-
+    # ion) at these ne/T conditions, so neutral concentrations are second-
+    # order. Using freestream-like neutral fractions as a conservative bound.
+    BOLTZ = 1.380649e-23
+    n_total_post = (p_inf_61 / (BOLTZ * 4500)) * 6   # ~post-shock total
+    n_N2 = 0.6 * n_total_post; n_O2 = 0.1 * n_total_post
+    n_NO = 0.05 * n_total_post; n_N = 0.15 * n_total_post; n_O = 0.10 * n_total_post
+
+    reflectometer_results = {}
+    for s in station_data:
+        if s.get("p99_ne_m3", 0) <= 0:
+            continue
+        # Use station p99 ne as the local sheath density (apples-to-apples
+        # with what J&C/Grantham measured at this station). Sheath thickness
+        # taken as the BL HWHM measured by the diagnostic — typical 2 cm
+        # at upstream stations, 0 where there's no plasma.
+        ne = s["p99_ne_m3"]
+        T_tr = s.get("max_T_tr_K", 4000.0)
+        # Conservative sheath path length: 5 cm (matches station-shell
+        # filtering used to extract ne; actual BL HWHM was ~1.7 cm so
+        # this is a generous upper bound on path length)
+        L_sheath = 0.05
+        # Collision frequency at station conditions (simplified)
+        # Using freestream-density approximation — real station density
+        # is in the post-shock state but plasma-wave attenuation is
+        # dominated by ne not nu.
+        nu = nu_total(T_e_k=T_tr, n_e_m3=ne,
+                      n_N2=n_N2, n_O2=n_O2, n_NO=n_NO,
+                      n_O=n_O, n_N=n_N)
+
+        for label, f_hz in [("VHF_225", 225e6), ("VHF_450", 450e6),
+                             ("X_band", 9.2e9)]:
+            alpha = float(attenuation_rate_db_per_m(ne, nu, f_hz))
+            atten_db = alpha * L_sheath
+            pub = status_for_alt(args.altitude, f_hz)
+            margin, verdict = db_margin_to_published(atten_db, pub)
+            print(f"  z/L={s['zL']:>4.2f} {label:>10s} {ne:>11.2e} "
+                  f"{L_sheath:>9.3f} {atten_db:>7.1f}dB "
+                  f"{pub:>10s} {margin:>+7.1f}dB {verdict:>14s}")
+            reflectometer_results[(s["zL"], label)] = {
+                "zL": s["zL"], "frequency_hz": f_hz,
+                "sheath_ne_m3": ne, "L_sheath_m": L_sheath,
+                "attenuation_db": atten_db,
+                "published_status": pub,
+                "db_margin": margin, "verdict": verdict,
+            }
+
+    # Step 4b: Aspect-scan attenuation (legacy — through whole flow column).
+    # Reported for diagnostics: shows the integrated attenuation through
+    # the bow-shock + stagnation region. NOT directly comparable to
+    # reflectometer measurements but useful for radar-detection-from-
+    # distance scenarios (BLACKOUT/DETECTABLE for a remote observer).
+    print(f"\nAspect-scan attenuation (whole flow column — for remote-radar "
+          f"scenarios, NOT reflectometer comparison):")
     field = build_unstructured_field(cfd)
     target = cfd.stag_point["xyz"]
     frequencies = {
@@ -257,9 +379,20 @@ def main():
         worst = detection_status(max_att)
         pub_status = status_for_alt(args.altitude, f_hz) if f_hz in (225e6, 450e6, 9.2e9) else "-"
         match = "OK" if worst == pub_status else ("-" if pub_status == "-" else "MISS")
+        # F-7: quantitative dB margin to the published-status band.
+        # Reported alongside the qualitative match so the reader sees
+        # HOW DEEP into the band our prediction lies, not just IS it in
+        # the right band. Margins are computed from the worst (peak)
+        # aspect — that's the angle the J&C reflectometer was most
+        # sensitive to.
+        margin = 0.0
+        margin_verdict = "n/a"
+        if pub_status != "-":
+            margin, margin_verdict = db_margin_to_published(max_att, pub_status)
         print(f"  {label:>10s} ({f_hz/1e9:>5.2f} GHz): "
               f"min={min_att:>6.1f} dB, max={max_att:>8.1f} dB, "
-              f"worst_status={worst}, published={pub_status} {match}")
+              f"published={pub_status} {match}  "
+              f"margin={margin:+6.1f} dB ({margin_verdict})")
         aspect_results[label] = {
             "frequency_hz": f_hz,
             "min_attenuation_db": min_att,
@@ -267,6 +400,8 @@ def main():
             "worst_status": worst,
             "published_status": pub_status,
             "matches": worst == pub_status,
+            "db_margin_to_published_band": margin,
+            "db_margin_verdict": margin_verdict,
             "per_angle": [
                 {"angle_deg": float(ang), "attenuation_db": r.attenuation_db,
                  "status": r.detection}

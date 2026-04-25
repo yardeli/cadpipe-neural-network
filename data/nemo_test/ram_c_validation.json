@@ -105,6 +105,8 @@
       "worst_status": "BLACKOUT",
       "published_status": "BLACKOUT",
       "matches": true,
+      "db_margin_to_published_band": 637.4294308803333,
+      "db_margin_verdict": "CONSISTENT",
       "per_angle": [
         {
           "angle_deg": 0.0,
@@ -150,6 +152,8 @@
       "worst_status": "BLACKOUT",
       "published_status": "BLACKOUT",
       "matches": true,
+      "db_margin_to_published_band": 912.2631644427088,
+      "db_margin_verdict": "CONSISTENT",
       "per_angle": [
         {
           "angle_deg": 0.0,
@@ -195,6 +199,8 @@
       "worst_status": "BLACKOUT",
       "published_status": "BLACKOUT",
       "matches": true,
+      "db_margin_to_published_band": 4251.173838458512,
+      "db_margin_verdict": "CONSISTENT",
       "per_angle": [
         {
           "angle_deg": 0.0,
@@ -240,6 +246,8 @@
       "worst_status": "BLACKOUT",
       "published_status": "-",
       "matches": false,
+      "db_margin_to_published_band": 0.0,
+      "db_margin_verdict": "n/a",
       "per_angle": [
         {
           "angle_deg": 0.0,
