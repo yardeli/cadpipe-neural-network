@@ -47,8 +47,17 @@ FIG_DIR = REPO / "docs" / "paper" / "figures"
 
 
 def run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
-    """Run a subprocess, stream output, raise on nonzero exit."""
+    """Run a subprocess, stream output, raise on nonzero exit.
+
+    On Windows, gcloud / npm / cdk are .cmd shims that subprocess can't
+    find directly without shell=True. Use shell=True on Windows when the
+    binary isn't a .exe.
+    """
     print(f"\n$ {' '.join(cmd)}")
+    if sys.platform == "win32" and cmd and not cmd[0].lower().endswith(".exe"):
+        # Quote args with spaces (e.g. Windows paths under Khorium Hypersonics/)
+        quoted = " ".join(f'"{a}"' if " " in a else a for a in cmd)
+        return subprocess.run(quoted, check=True, shell=True, **kw)
     return subprocess.run(cmd, check=True, **kw)
 
 

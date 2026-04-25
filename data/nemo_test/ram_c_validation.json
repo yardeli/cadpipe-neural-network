@@ -5,21 +5,37 @@
     "velocity_ms": 6639.122927945754
   },
   "cfd_stagnation": {
-    "T_tr_K": 6063.892578125,
-    "T_ve_K": 5910.59716796875,
-    "p_Pa": 231437.328125,
-    "ne_m3": 5.639980453316399e+20
+    "T_tr_K": 6395.33837890625,
+    "T_ve_K": 6247.84375,
+    "p_Pa": 230964.265625,
+    "ne_m3": 7.46576809306208e+20
+  },
+  "domain_peak_ne": {
+    "ne_m3": 1.7051389165311801e+21,
+    "ne_m3_max": 3.3723722681545224e+21,
+    "n_top_cells": 50,
+    "T_tr_K": 9475.5986328125,
+    "location_xyz": [
+      -0.022045310586690903,
+      0.020134970545768738,
+      0.015386192128062248
+    ]
   },
   "peak_sheath_ne": {
-    "ne_m3": 2.4086104508787504e+20,
-    "ne_m3_max": 6.464581636473455e+20,
+    "ne_m3": 5.1687786636064704e+17,
+    "ne_m3_max": 3.3723722681545224e+21,
     "n_top_cells": 50,
-    "T_tr_K": 6525.75439453125,
+    "T_tr_K": 9475.5986328125,
     "location_xyz": [
-      -0.023487767204642296,
-      0.011437810026109219,
-      0.034228451550006866
+      -0.022045310586690903,
+      0.020134970545768738,
+      0.015386192128062248
     ]
+  },
+  "sheath_peak_ne": {
+    "ne_m3": 5.1687786636064704e+17,
+    "matched_station_zL": 0.14,
+    "matched_station_z_m": 0.3556
   },
   "reference": {
     "mach": 22.5,
@@ -28,240 +44,240 @@
     "ne_upper": 4e+19,
     "source": "Jones & Cross 1972"
   },
-  "log10_error_vs_published": 1.080736570746204,
+  "log10_error_vs_published": -1.5876420603684984,
   "station_profile": [
     {
       "zL": 0.14,
       "z_m": 0.3556,
       "r_wall_m": 0.1864834034440374,
-      "n_cells": 7,
-      "n_nonzero_ne": 4,
-      "max_ne_m3": 928706091.0295285,
-      "p99_ne_m3": 904860394.1232982,
-      "max_T_tr_K": 1915.5120849609375
+      "n_cells": 2433,
+      "n_nonzero_ne": 1717,
+      "max_ne_m3": 6.959446863810682e+17,
+      "p99_ne_m3": 5.1687786636064704e+17,
+      "max_T_tr_K": 4043.080322265625
     },
     {
       "zL": 0.32,
       "z_m": 0.8128000000000001,
       "r_wall_m": 0.2588967695604154,
-      "n_cells": 3,
-      "n_nonzero_ne": 0,
-      "max_ne_m3": 0.0,
-      "p99_ne_m3": 0.0,
-      "max_T_tr_K": 1316.85986328125
+      "n_cells": 1810,
+      "n_nonzero_ne": 1042,
+      "max_ne_m3": 245809446211885.12,
+      "p99_ne_m3": 187822635887680.0,
+      "max_T_tr_K": 2823.92724609375
     },
     {
       "zL": 0.48,
       "z_m": 1.2192,
       "r_wall_m": 0.323264206108307,
-      "n_cells": 6,
-      "n_nonzero_ne": 0,
-      "max_ne_m3": 0.0,
-      "p99_ne_m3": 0.0,
-      "max_T_tr_K": 1062.6026611328125
+      "n_cells": 2117,
+      "n_nonzero_ne": 993,
+      "max_ne_m3": 539831425572.42267,
+      "p99_ne_m3": 392014174965.1894,
+      "max_T_tr_K": 2322.6611328125
     },
     {
       "zL": 0.67,
       "z_m": 1.7018000000000002,
       "r_wall_m": 0.39970053700892816,
-      "n_cells": 4,
+      "n_cells": 5028,
       "n_nonzero_ne": 0,
       "max_ne_m3": 0.0,
       "p99_ne_m3": 0.0,
-      "max_T_tr_K": 866.0018310546875
+      "max_T_tr_K": 1847.2872314453125
     },
     {
       "zL": 0.88,
       "z_m": 2.2352,
       "r_wall_m": 0.4841827974780358,
-      "n_cells": 3,
+      "n_cells": 2968,
       "n_nonzero_ne": 0,
       "max_ne_m3": 0.0,
       "p99_ne_m3": 0.0,
-      "max_T_tr_K": 773.2429809570312
+      "max_T_tr_K": 1442.560791015625
     }
   ],
   "aspect_scan_by_frequency": {
     "VHF_225": {
       "frequency_hz": 225000000.0,
-      "min_attenuation_db": 82.40662159331657,
-      "max_attenuation_db": 317.4519505598573,
+      "min_attenuation_db": 86.13289637222013,
+      "max_attenuation_db": 657.4294308803333,
       "worst_status": "BLACKOUT",
       "published_status": "BLACKOUT",
       "matches": true,
       "per_angle": [
         {
           "angle_deg": 0.0,
-          "attenuation_db": 279.23532920325687,
+          "attenuation_db": 650.2056850742118,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 30.0,
-          "attenuation_db": 153.99579997041934,
+          "attenuation_db": 657.4294308803333,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 60.0,
-          "attenuation_db": 133.92740690031562,
+          "attenuation_db": 615.3014893676112,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 90.0,
-          "attenuation_db": 154.4114409247148,
+          "attenuation_db": 437.1439308778973,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 120.0,
-          "attenuation_db": 317.4519505598573,
+          "attenuation_db": 266.8046227608482,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 150.0,
-          "attenuation_db": 82.40662159331657,
+          "attenuation_db": 331.8718884565206,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 180.0,
-          "attenuation_db": 105.0106091475833,
+          "attenuation_db": 86.13289637222013,
           "status": "BLACKOUT"
         }
       ]
     },
     "VHF_450": {
       "frequency_hz": 450000000.0,
-      "min_attenuation_db": 117.01314529794776,
-      "max_attenuation_db": 452.9543413813412,
+      "min_attenuation_db": 122.33957624484307,
+      "max_attenuation_db": 932.2631644427088,
       "worst_status": "BLACKOUT",
       "published_status": "BLACKOUT",
       "matches": true,
       "per_angle": [
         {
           "angle_deg": 0.0,
-          "attenuation_db": 395.878337950481,
+          "attenuation_db": 919.6004017156018,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 30.0,
-          "attenuation_db": 217.99551034116908,
+          "attenuation_db": 932.2631644427088,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 60.0,
-          "attenuation_db": 189.20969720275363,
+          "attenuation_db": 873.1033884247227,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 90.0,
-          "attenuation_db": 217.37731964796245,
+          "attenuation_db": 621.8046331603717,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 120.0,
-          "attenuation_db": 452.9543413813412,
+          "attenuation_db": 379.68737905800475,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 150.0,
-          "attenuation_db": 117.01314529794776,
+          "attenuation_db": 472.7556344297537,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 180.0,
-          "attenuation_db": 149.2774617289709,
+          "attenuation_db": 122.33957624484307,
           "status": "BLACKOUT"
         }
       ]
     },
     "X_band": {
       "frequency_hz": 9200000000.0,
-      "min_attenuation_db": 572.7429655675932,
-      "max_attenuation_db": 2219.032325919674,
+      "min_attenuation_db": 605.4091391262453,
+      "max_attenuation_db": 4271.173838458512,
       "worst_status": "BLACKOUT",
       "published_status": "BLACKOUT",
       "matches": true,
       "per_angle": [
         {
           "angle_deg": 0.0,
-          "attenuation_db": 1902.4177569193287,
+          "attenuation_db": 4000.2999623507335,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 30.0,
-          "attenuation_db": 1026.8034623991148,
+          "attenuation_db": 4146.698824812186,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 60.0,
-          "attenuation_db": 869.4869375286696,
+          "attenuation_db": 4271.173838458512,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 90.0,
-          "attenuation_db": 988.5502360515221,
+          "attenuation_db": 2984.8040690637135,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 120.0,
-          "attenuation_db": 2219.032325919674,
+          "attenuation_db": 1881.716424671436,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 150.0,
-          "attenuation_db": 572.7429655675932,
+          "attenuation_db": 2356.9091281000196,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 180.0,
-          "attenuation_db": 739.436300297562,
+          "attenuation_db": 605.4091391262453,
           "status": "BLACKOUT"
         }
       ]
     },
     "Ku_band": {
       "frequency_hz": 12000000000.0,
-      "min_attenuation_db": 654.2685156528092,
-      "max_attenuation_db": 2452.1941184439484,
+      "min_attenuation_db": 693.8540721679846,
+      "max_attenuation_db": 4908.13835498316,
       "worst_status": "BLACKOUT",
       "published_status": "-",
       "matches": false,
       "per_angle": [
         {
           "angle_deg": 0.0,
-          "attenuation_db": 2174.116192202012,
+          "attenuation_db": 4452.865968297053,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 30.0,
-          "attenuation_db": 1169.7961934439384,
+          "attenuation_db": 4608.720995661274,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 60.0,
-          "attenuation_db": 986.5889960304078,
+          "attenuation_db": 4908.13835498316,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 90.0,
-          "attenuation_db": 1117.8406131007036,
+          "attenuation_db": 3392.7382902289437,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 120.0,
-          "attenuation_db": 2452.1941184439484,
+          "attenuation_db": 2127.296079339241,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 150.0,
-          "attenuation_db": 654.2685156528092,
+          "attenuation_db": 2654.314490762664,
           "status": "BLACKOUT"
         },
         {
           "angle_deg": 180.0,
-          "attenuation_db": 840.2063595395948,
+          "attenuation_db": 693.8540721679846,
           "status": "BLACKOUT"
         }
       ]
     }
   },
-  "n_points": 63490
+  "n_points": 459460
 }

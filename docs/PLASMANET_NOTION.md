@@ -71,7 +71,7 @@ Getting any one of these wrong by a factor of 10 flips the detection answer. Get
 | 71 km | 23.6 | analytical sheath | 1.79 × 10¹⁹ | 1.0 × 10¹⁹ (range 0.5–2×10¹⁹) | **+0.25** ✅ |
 | 61 km | 22.5 | analytical sheath | 1.65 × 10²¹ | 2.0 × 10¹⁹ (range 1–4×10¹⁹) | +1.92 ⚠️ |
 | 61 km | 22.5 | **NEMO 2-T (63k tet, 2026-04-24)** | 2.41 × 10²⁰ (top-50 mean) | 2.0 × 10¹⁹ | **+1.08** (improved from +1.92) |
-| 61 km | 22.5 | NEMO 2-T (4.5M tet — running) | TBD | 2.0 × 10¹⁹ | TBD |
+| 61 km | 22.5 | **NEMO 2-T (459k node refined, 2026-04-25)** | 1.71e+21 (top-50 mean) | 2.0 × 10¹⁹ | **+1.93** ⚠ needs work |
 | 47 km | 18.5 | analytical sheath | 3.04 × 10²⁰ | 2.0 × 10¹⁹ (range 1.5–3×10¹⁹) | +1.18 ⚠️ |
 
 81–71 km predictions are within published measurement uncertainty. The 61/47 km gap with the analytical sheath is the non-equilibrium signature — SU2-NEMO closes ~half of it on the first pass (mesh-resolution-limited). Refined-mesh result will tell us how much more closes from sheath resolution alone vs. residual physics gaps (wall catalysis, ion-neutral chemistry).

@@ -136,27 +136,18 @@ def main():
     peak_xyz = cfd.coordinates[peak_idx]
     peak_T_tr = float(cfd.T_K[peak_idx])
 
-    print(f"\nPeak sheath ne (robust = mean of top {n_top} cells):")
+    print(f"\nDomain-wide peak ne (diagnostic — at stagnation point, NOT what J&C measured):")
     print(f"  ne_peak (robust) = {peak_ne:.2e} m^-3")
     print(f"  ne_peak (max)    = {peak_ne_max:.2e} m^-3 "
           f"(spike ratio {peak_ne_max/max(peak_ne,1e-30):.2f}x)")
     print(f"  location         = ({peak_xyz[0]:.3f}, {peak_xyz[1]:.3f}, {peak_xyz[2]:.3f}) m")
     print(f"  T_tr             = {peak_T_tr:.0f} K")
-
-    # log10 error vs reference
-    log10_error = None
-    if ref and ref["ne_peak_m3"] > 0 and peak_ne > 0:
-        log10_error = math.log10(peak_ne) - math.log10(ref["ne_peak_m3"])
-        print(f"  log10-error vs published: {log10_error:+.2f}")
-        if abs(log10_error) < 0.3:
-            verdict = "EXCELLENT — within measurement uncertainty"
-        elif abs(log10_error) < 0.7:
-            verdict = "GOOD — within factor of 5"
-        elif abs(log10_error) < 1.0:
-            verdict = "ACCEPTABLE — within one order of magnitude"
-        else:
-            verdict = f"NEEDS WORK — {abs(log10_error):.1f} orders off"
-        print(f"  Verdict: {verdict}")
+    print(f"  NOTE: J&C 1972 measured ne via probes AT THE BODY at "
+          f"reflectometer stations,")
+    print(f"        not at stagnation. The headline log10 error is computed "
+          f"below from the")
+    print(f"        per-station sheath ne — apples-to-apples with the "
+          f"published measurement.")
 
     # Step 3: ne profile along axial stations.
     # At each reflectometer station, restrict to the sheath shell
@@ -200,6 +191,47 @@ def main():
             "max_ne_m3": max_ne, "p99_ne_m3": p99_ne,
             "max_T_tr_K": max_T,
         })
+
+    # Step 3b: Headline ne comparison vs J&C 1972 — apples-to-apples.
+    # J&C measured peak ne via electrostatic probes AT THE BODY at the five
+    # reflectometer stations (z/L = 0.14, 0.32, 0.48, 0.67, 0.88), not at
+    # the stagnation point. Compare the peak ne across those stations to
+    # their published peak. Use p99 (not max) so single-cell artifacts
+    # don't drive the comparison.
+    sheath_peak_ne = max(
+        (s["p99_ne_m3"] for s in station_data if s["p99_ne_m3"] > 0),
+        default=0.0,
+    )
+    sheath_peak_station = next(
+        (s for s in station_data if s["p99_ne_m3"] == sheath_peak_ne),
+        None,
+    )
+
+    log10_error = None
+    if ref and ref["ne_peak_m3"] > 0 and sheath_peak_ne > 0:
+        log10_error = math.log10(sheath_peak_ne) - math.log10(ref["ne_peak_m3"])
+        if abs(log10_error) < 0.3:
+            verdict = "EXCELLENT — within measurement uncertainty"
+        elif abs(log10_error) < 0.7:
+            verdict = "GOOD — within factor of 5"
+        elif abs(log10_error) < 1.0:
+            verdict = "ACCEPTABLE — within one order of magnitude"
+        else:
+            sign = "OVER" if log10_error > 0 else "UNDER"
+            verdict = f"NEEDS WORK — {abs(log10_error):.1f} orders {sign}-prediction"
+        zL_str = f"z/L={sheath_peak_station['zL']:.2f}" if sheath_peak_station else "?"
+        print(f"\nHeadline comparison vs J&C 1972 (apples-to-apples, "
+              f"sheath p99 ne at body):")
+        print(f"  NEMO sheath peak (best station, {zL_str}): "
+              f"{sheath_peak_ne:.2e} m^-3")
+        print(f"  Published peak (J&C 1972 reflectometer):  "
+              f"{ref['ne_peak_m3']:.2e} m^-3")
+        print(f"  log10 error:  {log10_error:+.2f}  →  {verdict}")
+    elif ref:
+        # Sheath totally undersheath at every station — solution has no
+        # downstream plasma. Report this clearly instead of skipping.
+        print(f"\nHeadline comparison vs J&C 1972: ne is ZERO at every "
+              f"reflectometer station — sheath unresolved, can't compare.")
 
     # Step 4: Line-of-sight attenuation at the three RAM-C reflectometer
     # frequencies (VHF 225, VHF 450, X-band 9.2 GHz) plus Ku-band
@@ -255,12 +287,30 @@ def main():
             "p_Pa": cfd.stag_point["p_Pa"],
             "ne_m3": cfd.stag_point["ne_m3"],
         },
-        "peak_sheath_ne": {
+        "domain_peak_ne": {
+            # Diagnostic — at stagnation point, NOT what J&C measured.
+            # Kept here for visibility but not used for the headline error.
             "ne_m3": peak_ne,            # robust (top-K mean)
             "ne_m3_max": peak_ne_max,    # raw single-cell max
             "n_top_cells": n_top,
             "T_tr_K": peak_T_tr,
             "location_xyz": peak_xyz.tolist(),
+        },
+        # Backward-compat alias — older Notion entries reference peak_sheath_ne.
+        "peak_sheath_ne": {
+            "ne_m3": sheath_peak_ne,     # NEW: sheath peak (apples-to-apples)
+            "ne_m3_max": peak_ne_max,    # legacy: domain single-cell max
+            "n_top_cells": n_top,
+            "T_tr_K": peak_T_tr,
+            "location_xyz": peak_xyz.tolist(),
+        },
+        "sheath_peak_ne": {
+            # Apples-to-apples with J&C 1972 reflectometer measurements.
+            "ne_m3": sheath_peak_ne,
+            "matched_station_zL": (sheath_peak_station["zL"]
+                                    if sheath_peak_station else None),
+            "matched_station_z_m": (sheath_peak_station["z_m"]
+                                    if sheath_peak_station else None),
         },
         "reference": ref,
         "log10_error_vs_published": log10_error,
@@ -291,13 +341,17 @@ def main():
         "",
     ]
     if ref:
+        zL_str = (f"z/L={sheath_peak_station['zL']:.2f}"
+                  if sheath_peak_station else "n/a")
+        log10_str = f"{log10_error:+.2f}" if log10_error is not None else "n/a"
         md.extend([
             f"| | Value | Source |",
             f"|---|---|---|",
-            f"| NEMO prediction (robust, top-{n_top} mean) | {peak_ne:.2e} m^-3 | this run |",
-            f"| NEMO single-cell max | {peak_ne_max:.2e} m^-3 (spike {peak_ne_max/max(peak_ne,1e-30):.2f}x) | this run |",
-            f"| Published reference | {ref['ne_peak_m3']:.2e} m^-3 (range {ref['ne_lower']:.1e}-{ref['ne_upper']:.1e}) | {ref['source']} |",
-            f"| log10 error (robust) | {log10_error:+.2f} | |",
+            f"| **NEMO sheath peak (best station, {zL_str})** | **{sheath_peak_ne:.2e} m^-3** | **apples-to-apples vs J&C** |",
+            f"| Published reference (J&C 1972 reflectometer) | {ref['ne_peak_m3']:.2e} m^-3 (range {ref['ne_lower']:.1e}-{ref['ne_upper']:.1e}) | {ref['source']} |",
+            f"| **log10 error (sheath peak vs J&C)** | **{log10_str}** | |",
+            f"| (diagnostic) NEMO domain peak — at stagnation, not what J&C measured | {peak_ne:.2e} m^-3 (top-{n_top} mean) | informational only |",
+            f"| (diagnostic) NEMO domain single-cell max | {peak_ne_max:.2e} m^-3 | informational only |",
         ])
     md.extend([
         "",
