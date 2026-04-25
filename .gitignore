@@ -53,3 +53,5 @@ cdk.out/
 # Frontend build artifacts
 frontend/dist/
 frontend/storybook-static/
+
+*storybook.log
