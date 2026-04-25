@@ -28,6 +28,10 @@ data/cfd_cases_nemo/**/su2.log
 data/cfd_cases_nemo/**/history.csv
 data/cfd_cases_nemo/**/mesh.cas
 
+# Auto-generated paper figures (regenerate via scripts/make_paper_figures.py)
+docs/paper/figures/*.png
+docs/paper/figures/results_blurb.md
+
 # Model checkpoints (large, regeneratable)
 checkpoints/*.pt
 
