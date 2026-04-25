@@ -32,6 +32,10 @@ data/cfd_cases_nemo/**/mesh.cas
 docs/paper/figures/*.png
 docs/paper/figures/results_blurb.md
 
+# Local checkpoint snapshots (the VTU is already committed under data/nemo_test/;
+# checkpoints just hold a curated subset for hand-off / Word doc generation).
+data/checkpoints/
+
 # Model checkpoints (large, regeneratable)
 checkpoints/*.pt
 
