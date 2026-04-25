@@ -77,10 +77,11 @@ jobs:
             Pillow \
             matplotlib
 
-      - name: Run mock_server + lambda + PDF contract tests
+      - name: Run mock_server + lambda + PDF + agent contract tests
         run: |
           pytest \
             tests/test_mock_server_contract.py \
             tests/test_simulation_complete_lambda.py \
             tests/test_pdf_report.py \
+            tests/test_agent_tools.py \
             -v
