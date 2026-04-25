@@ -48,7 +48,12 @@ make_cfg() {
 SOLVER= NEMO_EULER
 GAS_MODEL= air_11
 % air_11 species order: e-, N+, O+, NO+, N2+, O2+, N, O, NO, N2, O2
-GAS_COMPOSITION= (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.77, 0.23)
+% Seeded ions at 1e-9 mass fraction each — bypasses the cold-start
+% chemistry NaN (which happened with all-zero ions: source terms
+% have 1/n_e or log(n_e) terms that blow up at machine zero).
+% N2/O2 balanced so total sum = 1.0 within float precision:
+%   9 × 1e-9 + (0.77 - 4.5e-9) + (0.23 - 4.5e-9) = 1.0
+GAS_COMPOSITION= (1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9, 0.7699999955, 0.2299999955)
 MATH_PROBLEM= DIRECT
 RESTART_SOL= $restart
 SOLUTION_FILENAME= solution.dat
@@ -69,10 +74,17 @@ MARKER_PLOTTING= ( body )
 MARKER_MONITORING= ( body )
 
 NUM_METHOD_GRAD= WEIGHTED_LEAST_SQUARES
-% Explicit scheme needs smaller CFL
-CFL_NUMBER= 0.3
+% Adaptive CFL: start tiny (0.01), ramp up as residual drops. Prevents
+% the chemistry stiffness blowup that NaN'd the previous attempts on
+% pure-neutral cold-start. Format: (factor_down, factor_up, CFL_min, CFL_max).
+CFL_NUMBER= 0.01
+CFL_ADAPT= YES
+CFL_ADAPT_PARAM= ( 0.5, 1.5, 0.001, 0.5 )
 ITER= $iter
+% Use LAX-FRIEDRICH (most dissipative -> most robust) for stability
 CONV_NUM_METHOD_FLOW= LAX-FRIEDRICH
+% First-order spatial — disable MUSCL reconstruction. Less accurate but
+% removes another source of non-physical extrema during warmup.
 MUSCL_FLOW= NO
 % EULER_IMPLICIT is NOT supported with MUTATIONPP in SU2 v7.5.1
 TIME_DISCRE_FLOW= EULER_EXPLICIT
