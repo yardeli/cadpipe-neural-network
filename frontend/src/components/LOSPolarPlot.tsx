@@ -294,6 +294,8 @@ export function LOSPolarPlot({
         {visible.map((band) => (
           <path
             key={band.label}
+            data-testid="freq-line"
+            data-band-label={band.label}
             d={freqPath(band)}
             fill="none"
             stroke={band.color}
