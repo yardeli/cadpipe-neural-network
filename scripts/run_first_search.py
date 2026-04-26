@@ -100,11 +100,11 @@ def main():
         print(f"    log10 err    = {r.log10_err_ne:+.3f}")
         print(f"    dB verdicts  = {r.db_verdicts_by_freq_hz}")
 
-    # ── Persist top-K
+    # ── Persist top-K (always — fix prior bug that skipped saving)
     out_dir = Path("/home/yarden/mechanism_search_results/first_run")
-    if out_dir.parent.exists() or out_dir.parent == Path("/home/yarden"):
-        save_results(results, out_dir, top_k=10)
-        print(f"\nSaved top-10 to {out_dir}/")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    save_results(results, out_dir, top_k=10)
+    print(f"\nSaved top-10 to {out_dir}/")
 
     return 0
 
