@@ -281,14 +281,22 @@ def score_against_benchmark(
             db_margins[f_hz] = margin
             db_verdicts[f_hz] = verdict
 
-    # Composite score: log10 error in ne + averaged dB margin penalty
+    # Composite score: log10 ne error + verdict-based dB penalty.
+    # Being "deep inside the right band" should NOT penalize (it's the
+    # correct status). Only INCONSISTENT or BORDERLINE adds penalty.
     if log10_err_ne_val != log10_err_ne_val:
         score_val = float("inf")
     else:
         score_val = abs(log10_err_ne_val)
-        if db_margins:
-            mean_db = sum(abs(m) for m in db_margins.values()) / len(db_margins)
-            score_val += 0.05 * mean_db
+        for f_hz, verdict in db_verdicts.items():
+            if verdict == "CONSISTENT":
+                pass    # right band = no penalty
+            elif verdict == "BORDERLINE":
+                score_val += 0.3
+            elif verdict == "INCONSISTENT":
+                # 1.0 base + 0.05/dB how far past the correct band edge
+                margin = db_margins.get(f_hz, 0.0)
+                score_val += 1.0 + 0.05 * abs(margin)
 
     return BenchmarkResult(
         benchmark_name=benchmark.name,
@@ -410,11 +418,18 @@ def score_candidate(
 def _cfd_vtu_evaluator(input_data: dict, benchmark: BenchmarkCondition) -> dict:
     """Evaluator that reads a SU2-NEMO VTU and returns ne + dB attenuation.
 
-    Args:
-        input_data: {'vtu_path': str, ...}
-        benchmark: which condition the VTU corresponds to
+    Mirrors the sheath-peak logic of scripts/validate_ram_c_nemo.py:
+      - ne is the MAX p99 over the 5 reflectometer stations (z/L ∈
+        {0.14, 0.32, 0.48, 0.67, 0.88}) within the sheath shell
+        (r_wall < r < r_wall + 0.3m). NOT the domain peak (which would
+        be the stagnation point and is 100× higher than what J&C
+        actually measured with body-mounted probes).
+      - dB attenuation per frequency is the WORST aspect from a 7-angle
+        scan (0..180 deg in xz plane).
     """
-    from plasmanet.cfd_field import extract_nemo_field
+    import math
+    import numpy as np
+    from plasmanet.cfd_field import extract_nemo_field, build_unstructured_field
 
     vtu_path = input_data.get("vtu_path")
     if not vtu_path:
@@ -426,21 +441,54 @@ def _cfd_vtu_evaluator(input_data: dict, benchmark: BenchmarkCondition) -> dict:
         verbose=False,
     )
 
-    # Sheath peak ne (matches J&C reflectometer measurement geometry)
-    import numpy as np
-    n_top = max(min(50, cfd.n_points // 1000), 1)
-    top_idx = np.argpartition(cfd.ne_m3, -n_top)[-n_top:]
-    ne_peak = float(np.mean(cfd.ne_m3[top_idx]))
+    # ── Sheath peak ne (apples-to-apples with J&C reflectometer)
+    RAM_C_BODY_LENGTH_M = 2.54
+    RAM_C_NOSE_RADIUS_M = 0.1524
+    RAM_C_HALF_ANGLE_DEG = 9.0
+    STATION_ZL = [0.14, 0.32, 0.48, 0.67, 0.88]
 
-    # dB attenuation at each frequency (uses existing line_of_sight machinery)
+    def body_radius_at_x(x: float) -> float:
+        if x <= 0:
+            return 0.0
+        half = math.radians(RAM_C_HALF_ANGLE_DEG)
+        R_n = RAM_C_NOSE_RADIUS_M
+        x_tang = R_n * (1 - math.sin(half))
+        if x <= x_tang:
+            return math.sqrt(max(R_n * R_n - (R_n - x) ** 2, 0.0))
+        r_tang = R_n * math.cos(half)
+        return r_tang + (x - x_tang) * math.tan(half)
+
+    sheath_peaks = []
+    dz = 0.05
+    sheath_thickness = 0.3
+    for zL in STATION_ZL:
+        z_target = zL * RAM_C_BODY_LENGTH_M
+        r_wall = body_radius_at_x(z_target)
+        ax_mask = np.abs(cfd.coordinates[:, 0] - z_target) < dz
+        if ax_mask.sum() == 0:
+            continue
+        r = np.linalg.norm(cfd.coordinates[ax_mask, 1:3], axis=1)
+        sheath_mask = (r >= r_wall) & (r <= r_wall + sheath_thickness)
+        ne_slice = cfd.ne_m3[ax_mask][sheath_mask]
+        if ne_slice.size > 0 and ne_slice.max() > 0:
+            sheath_peaks.append(float(np.percentile(ne_slice, 99)))
+
+    ne_peak = max(sheath_peaks) if sheath_peaks else 0.0
+
+    # ── dB attenuation per frequency (worst aspect across angular scan)
     db_by_freq = {}
     try:
-        from plasmanet.line_of_sight import scan_aspect, Ray
-        # Stagnation-line LOS for simplicity — full angular scan is in
-        # validate_ram_c_nemo.py; we pick worst aspect.
+        from plasmanet.line_of_sight import scan_aspect
+        field = build_unstructured_field(cfd)
+        target = cfd.stag_point["xyz"]
+        angles = np.array([0, 30, 60, 90, 120, 150, 180])
         for f_hz in benchmark.detection_status_by_freq_hz:
-            angles = [0, 30, 60, 90, 120, 150, 180]
-            results = scan_aspect(cfd, f_hz, angles, geometry="ram_c")
+            results = scan_aspect(
+                field, target_position=target,
+                f_hz=f_hz, source_distance=10.0,
+                angles_deg=angles, plane="xz",
+                n_samples=2000, adaptive=True,
+            )
             db_by_freq[f_hz] = float(max(r.attenuation_db for r in results))
     except Exception as exc:
         print(f"[scoring] LOS scan failed: {exc}")
