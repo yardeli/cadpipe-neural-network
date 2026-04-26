@@ -51,8 +51,15 @@ from typing import Optional, Callable, Any
 
 @dataclass
 class BenchmarkCondition:
-    """One flight measurement we score predictions against."""
+    """One flight measurement we score predictions against.
+
+    Each benchmark references a VehicleGeometry (so the framework knows
+    where the sensors are and what the body shape is). Designers adding
+    a new benchmark must supply both the flight conditions AND the
+    associated VehicleGeometry — no hardcoded RAM-C assumptions.
+    """
     name: str
+    vehicle: "VehicleGeometry"   # forward ref — see geometry.py
     altitude_km: float
     mach: float
     velocity_ms: float
@@ -70,80 +77,60 @@ class BenchmarkCondition:
     weight: float = 1.0
 
 
-BENCHMARKS: dict[str, BenchmarkCondition] = {
-    "ram_c_61km_M22.5": BenchmarkCondition(
-        name="ram_c_61km_M22.5",
-        altitude_km=61.0,
-        mach=22.5,
-        velocity_ms=7300.0,    # approx. flight value
-        pressure_pa=253.7116,
-        temperature_k=242.65,
-        ne_published_m3=2.0e19,
-        ne_lower_m3=1.0e19,
-        ne_upper_m3=4.0e19,
-        detection_status_by_freq_hz={
-            2.25e8: "BLACKOUT",   # VHF 225 MHz
-            4.50e8: "BLACKOUT",   # VHF 450 MHz
-            9.20e9: "BLACKOUT",   # X-band 9.2 GHz
-        },
-        source="Jones & Cross 1972 (NASA TN D-6617) — primary RAM-C anchor",
-        weight=2.0,   # primary anchor: extra weight
-    ),
-    "ram_c_71km_M23.6": BenchmarkCondition(
-        name="ram_c_71km_M23.6",
-        altitude_km=71.0,
-        mach=23.6,
-        velocity_ms=7200.0,
-        pressure_pa=58.5,
-        temperature_k=216.65,
-        ne_published_m3=1.0e19,
-        ne_lower_m3=5.0e18,
-        ne_upper_m3=2.0e19,
-        detection_status_by_freq_hz={
-            2.25e8: "BLACKOUT",
-            4.50e8: "DEGRADED",
-            9.20e9: "DEGRADED",
-        },
-        source="Jones & Cross 1972",
-        weight=1.0,
-    ),
-    "ram_c_81km_M23.9": BenchmarkCondition(
-        name="ram_c_81km_M23.9",
-        altitude_km=81.0,
-        mach=23.9,
-        velocity_ms=7100.0,
-        pressure_pa=10.1,
-        temperature_k=210.65,
-        ne_published_m3=2.0e18,
-        ne_lower_m3=1.0e18,
-        ne_upper_m3=3.5e18,
-        detection_status_by_freq_hz={
-            2.25e8: "DEGRADED",
-            4.50e8: "DETECTABLE",
-            9.20e9: "DETECTABLE",
-        },
-        source="Jones & Cross 1972",
-        weight=1.0,
-    ),
-    "ram_c_47km_M18.5": BenchmarkCondition(
-        name="ram_c_47km_M18.5",
-        altitude_km=47.0,
-        mach=18.5,
-        velocity_ms=6400.0,
-        pressure_pa=110.9,
-        temperature_k=270.65,
-        ne_published_m3=2.0e19,
-        ne_lower_m3=1.5e19,
-        ne_upper_m3=3.0e19,
-        detection_status_by_freq_hz={
-            2.25e8: "BLACKOUT",
-            4.50e8: "BLACKOUT",
-            9.20e9: "BLACKOUT",
-        },
-        source="Grantham 1970 (NASA TN D-6062)",
-        weight=1.0,
-    ),
-}
+def _build_default_benchmarks() -> dict[str, BenchmarkCondition]:
+    """Build the default RAM-C benchmark suite. Designers add their own
+    benchmarks for new vehicles by:
+      1. Define a VehicleGeometry (or use predefined APOLLO_CM_GEOMETRY etc.)
+      2. Append a BenchmarkCondition with their flight conditions + measured ne
+      3. Either extend BENCHMARKS dict directly or pass a custom dict to
+         score_candidate(..., benchmarks_override=...)
+    """
+    from .geometry import RAM_C_GEOMETRY
+    return {
+        "ram_c_61km_M22.5": BenchmarkCondition(
+            name="ram_c_61km_M22.5", vehicle=RAM_C_GEOMETRY,
+            altitude_km=61.0, mach=22.5, velocity_ms=7300.0,
+            pressure_pa=253.7116, temperature_k=242.65,
+            ne_published_m3=2.0e19, ne_lower_m3=1.0e19, ne_upper_m3=4.0e19,
+            detection_status_by_freq_hz={
+                2.25e8: "BLACKOUT", 4.50e8: "BLACKOUT", 9.20e9: "BLACKOUT",
+            },
+            source="Jones & Cross 1972 (NASA TN D-6617) — primary RAM-C anchor",
+            weight=2.0,
+        ),
+        "ram_c_71km_M23.6": BenchmarkCondition(
+            name="ram_c_71km_M23.6", vehicle=RAM_C_GEOMETRY,
+            altitude_km=71.0, mach=23.6, velocity_ms=7200.0,
+            pressure_pa=58.5, temperature_k=216.65,
+            ne_published_m3=1.0e19, ne_lower_m3=5.0e18, ne_upper_m3=2.0e19,
+            detection_status_by_freq_hz={
+                2.25e8: "BLACKOUT", 4.50e8: "DEGRADED", 9.20e9: "DEGRADED",
+            },
+            source="Jones & Cross 1972", weight=1.0,
+        ),
+        "ram_c_81km_M23.9": BenchmarkCondition(
+            name="ram_c_81km_M23.9", vehicle=RAM_C_GEOMETRY,
+            altitude_km=81.0, mach=23.9, velocity_ms=7100.0,
+            pressure_pa=10.1, temperature_k=210.65,
+            ne_published_m3=2.0e18, ne_lower_m3=1.0e18, ne_upper_m3=3.5e18,
+            detection_status_by_freq_hz={
+                2.25e8: "DEGRADED", 4.50e8: "DETECTABLE", 9.20e9: "DETECTABLE",
+            },
+            source="Jones & Cross 1972", weight=1.0,
+        ),
+        "ram_c_47km_M18.5": BenchmarkCondition(
+            name="ram_c_47km_M18.5", vehicle=RAM_C_GEOMETRY,
+            altitude_km=47.0, mach=18.5, velocity_ms=6400.0,
+            pressure_pa=110.9, temperature_k=270.65,
+            ne_published_m3=2.0e19, ne_lower_m3=1.5e19, ne_upper_m3=3.0e19,
+            detection_status_by_freq_hz={
+                2.25e8: "BLACKOUT", 4.50e8: "BLACKOUT", 9.20e9: "BLACKOUT",
+            },
+            source="Grantham 1970 (NASA TN D-6062)", weight=1.0,
+        ),
+    }
+
+BENCHMARKS: dict[str, BenchmarkCondition] = _build_default_benchmarks()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -435,35 +422,23 @@ def _cfd_vtu_evaluator(input_data: dict, benchmark: BenchmarkCondition) -> dict:
     if not vtu_path:
         return {"ne_m3": 0.0, "db_by_freq_hz": {}}
 
+    # Use the VehicleGeometry from the benchmark — NO hardcoding
+    geom = benchmark.vehicle
+    cfd_geometry_name = geom.name if geom.name in ("ram_c",) else "generic"
+
     cfd = extract_nemo_field(
-        str(vtu_path), geometry="ram_c",
+        str(vtu_path), geometry=cfd_geometry_name,
         mach=benchmark.mach, altitude_km=benchmark.altitude_km,
         verbose=False,
     )
 
-    # ── Sheath peak ne (apples-to-apples with J&C reflectometer)
-    RAM_C_BODY_LENGTH_M = 2.54
-    RAM_C_NOSE_RADIUS_M = 0.1524
-    RAM_C_HALF_ANGLE_DEG = 9.0
-    STATION_ZL = [0.14, 0.32, 0.48, 0.67, 0.88]
-
-    def body_radius_at_x(x: float) -> float:
-        if x <= 0:
-            return 0.0
-        half = math.radians(RAM_C_HALF_ANGLE_DEG)
-        R_n = RAM_C_NOSE_RADIUS_M
-        x_tang = R_n * (1 - math.sin(half))
-        if x <= x_tang:
-            return math.sqrt(max(R_n * R_n - (R_n - x) ** 2, 0.0))
-        r_tang = R_n * math.cos(half)
-        return r_tang + (x - x_tang) * math.tan(half)
-
+    # ── Sheath peak ne (apples-to-apples with reflectometer geometry)
     sheath_peaks = []
-    dz = 0.05
-    sheath_thickness = 0.3
-    for zL in STATION_ZL:
-        z_target = zL * RAM_C_BODY_LENGTH_M
-        r_wall = body_radius_at_x(z_target)
+    dz = 0.02 * geom.body_length_m       # axial half-window (2% of body)
+    sheath_thickness = geom.sheath_thickness_m
+    for zL in geom.reflectometer_stations_zL:
+        z_target = zL * geom.body_length_m
+        r_wall = geom.body_radius_at_x(z_target)
         ax_mask = np.abs(cfd.coordinates[:, 0] - z_target) < dz
         if ax_mask.sum() == 0:
             continue

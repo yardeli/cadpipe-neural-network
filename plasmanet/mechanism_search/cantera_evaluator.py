@@ -210,26 +210,28 @@ def evaluate(
     mole_fracs = {sp: float(gas.X[i]) for i, sp in enumerate(gas.species_names)}
 
     # ── 7. dB attenuation per frequency (Appleton-Hartree approximation)
-    # For sheath of thickness L at electron density ne_m3, frequency f:
-    #   plasma_freq f_p = (1/2pi) * sqrt(n_e * e^2 / (eps_0 * m_e))
-    #                   ≈ 8980 * sqrt(n_e in cm^-3) Hz
+    # Sheath path length comes from the VehicleGeometry, not hardcoded.
+    # Plasma frequency: f_p ≈ 8980 * sqrt(n_e in cm^-3) Hz
     db_by_freq = {}
     f_p_hz = 8980 * math.sqrt(max(ne_m3 * 1e-6, 0))   # cm^-3 → Hz
-    SHEATH_THICKNESS_M = 0.05    # rough RAM-C sheath thickness
-    NU_COLLISION_HZ = 1e10        # rough collision frequency
+    # Use the vehicle's sheath path length at the maximum-ne axial location
+    # (rough estimate: middle of body)
+    geom = benchmark.vehicle
+    sheath_path_m = geom.estimate_sheath_path_length(0.5 * geom.body_length_m)
+    # Collision frequency at post-shock conditions: nu ≈ 1e-13 * P[Pa] * Hz
+    # (~1e10 for 0.1 atm post-shock; scale linearly with pressure)
+    nu_collision_hz = 1e10 * (gas.P / 1.01325e5)
     for f_hz, _ in benchmark.detection_status_by_freq_hz.items():
         if f_hz > f_p_hz:
-            # Wave can propagate, evanescent loss only
-            # |k|² ≈ (omega² - omega_p²) / c² ; for high collision:
-            # alpha_dB_per_m ≈ 8.686 * (omega_p² * nu) / (2 c * (omega² + nu²))
+            # Wave propagates, finite collisional loss
             omega = 2 * math.pi * f_hz
             omega_p = 2 * math.pi * f_p_hz
-            alpha = 8.686 * (omega_p ** 2 * NU_COLLISION_HZ) / (
-                2 * 3e8 * (omega ** 2 + NU_COLLISION_HZ ** 2))
-            db_by_freq[f_hz] = alpha * SHEATH_THICKNESS_M
+            alpha = 8.686 * (omega_p ** 2 * nu_collision_hz) / (
+                2 * 3e8 * (omega ** 2 + nu_collision_hz ** 2))
+            db_by_freq[f_hz] = alpha * sheath_path_m
         else:
-            # Evanescent — full attenuation
-            db_by_freq[f_hz] = 100.0   # saturate
+            # Evanescent — saturated attenuation
+            db_by_freq[f_hz] = 100.0
 
     return {
         "ne_m3": ne_m3,

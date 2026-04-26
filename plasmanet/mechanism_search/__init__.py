@@ -22,6 +22,15 @@ from .generator import (
     park_air11,
     random_subset,
 )
+from .geometry import (
+    VehicleGeometry,
+    RAM_C_GEOMETRY,
+    APOLLO_CM_GEOMETRY,
+    FIRE_II_GEOMETRY,
+    GENERIC_HGV_GEOMETRY,
+    PREDEFINED_GEOMETRIES,
+    get_geometry,
+)
 from .scoring import (
     BENCHMARKS,
     BenchmarkCondition,
@@ -49,6 +58,10 @@ __all__ = [
     "Reaction", "Mechanism", "PARK_47",
     "AIR_5_SPECIES", "AIR_7_SPECIES", "AIR_11_SPECIES",
     "park_air5", "park_air7", "park_air11", "random_subset",
+    # geometry
+    "VehicleGeometry",
+    "RAM_C_GEOMETRY", "APOLLO_CM_GEOMETRY", "FIRE_II_GEOMETRY",
+    "GENERIC_HGV_GEOMETRY", "PREDEFINED_GEOMETRIES", "get_geometry",
     # scoring
     "BENCHMARKS", "BenchmarkCondition", "BenchmarkResult", "ScoringResult",
     "score_against_benchmark", "score_candidate", "register_evaluator",
