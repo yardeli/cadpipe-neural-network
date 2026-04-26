@@ -135,6 +135,26 @@ S-1 (50%) ──→ S-6 (✅) ──→ S-2 (65% — VM retest needed)
    GA search across reaction subsets → find top-K candidates.
 4. CFD-validate top-K via S-5 (using /opt/su2-nemo-mpi/ binary).
 
+### LATE UPDATE 2026-04-26: SEARCH FRAMEWORK STRUCTURALLY VALIDATED
+
+* Cantera 0D evaluator end-to-end works on VM. T_post=17440K (correct),
+  CVode integrates without NaN, ne=5.66e19 m^-3 (finite, ionized).
+* First end-to-end GA search (50 evals, 0.2s wall) returned top candidates
+  with composite score 0.003 — but this was an EQUILIBRIUM ARTIFACT
+  (residence_time=100us long enough to fully equilibrate, mechanism
+  doesn't matter).
+* Re-run at residence_time=1us (kinetics-relevant) returned 8 orders of
+  magnitude variance in ne across 51 candidates → search genuinely
+  discriminates. Top-1 log10 err = +0.36 (factor-2 of J&C).
+* 11-run multi-axis sweep (seeds, residence times, altitudes) confirms:
+  - Reproducibility is ±1 log10 across seeds (need wider budget)
+  - Residence time controls equilibrium vs kinetics regime
+  - Surrogate accuracy degrades at 71+km (under-predicts 100-1000x)
+* Documented in docs/SWEEP_RESULTS_2026-04-26.md.
+
+The framework can now be used end-to-end. Surrogate-vs-CFD validation is
+the remaining open item, blocked on v7 finishing M22.5 (~7h ETA).
+
 ### Modularity & vehicle-class extension
 The framework was refactored mid-session to remove all RAM-C hardcoding.
 Designers add new vehicles by instantiating `VehicleGeometry` (or using
