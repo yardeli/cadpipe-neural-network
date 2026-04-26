@@ -52,6 +52,15 @@ from .search_loop import (
     genetic_search,
     save_results,
 )
+from .surrogate import (
+    MechanismFingerprint,
+    MechanismSurrogate,
+    TrainingExample,
+    train_surrogate,
+    register_surrogate_evaluator,
+    freestream_features,
+    HAVE_TORCH,
+)
 
 __all__ = [
     # generator
@@ -70,4 +79,8 @@ __all__ = [
     "cantera_0d_evaluate", "HAVE_CANTERA",
     # search loop
     "SearchProgress", "random_search", "genetic_search", "save_results",
+    # surrogate (S-3)
+    "MechanismFingerprint", "MechanismSurrogate", "TrainingExample",
+    "train_surrogate", "register_surrogate_evaluator",
+    "freestream_features", "HAVE_TORCH",
 ]
