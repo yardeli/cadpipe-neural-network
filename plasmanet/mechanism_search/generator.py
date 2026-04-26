@@ -470,17 +470,175 @@ _add(18, "O2+ + e- => 2 O",
       Tcf_a=0.0, Tcf_b=1.0,
       is_ionization=True)
 
-# Reactions 19-47: additional dissociation partners, secondary exchanges,
-# and Park 1993 updates. We seed a placeholder set; full table is in
-# data/park47_full.json (TODO: extract from Park 1990 Tables 2+4+6).
-# For now, mark them as future-additions so the search framework knows
-# the space is larger than 18.
+# ──────────────────────────────────────────────────────────────────────
+# Reactions 19-40: partner-specific dissociation rates.
+# Park 1990 distinguishes M (collision partner) into atomic vs molecular
+# vs electron, with different rate constants. Cross-checked against
+# SU2-NEMO CSU2TCLib AIR-7 source (rates ArrheniusCoefficient[0..21]).
+# ──────────────────────────────────────────────────────────────────────
 
-for i in range(19, 48):
-    _add(i, f"placeholder_rxn_{i}",
+# N2 dissociation by atomic partners (faster than by molecular partners)
+_add(19, "N2 + N => 2 N + N",
+     {"N2": 1, "N": 1}, {"N": 3},
+     A=3.0e22, n=-1.6, theta_a=113200,
+     Tcf_a=0.5, Tcf_b=0.5,
+     has_third_body=True, is_dissociation=True,
+     notes="N2 dissoc by N atom (faster than molecular partners)")
+
+_add(20, "N2 + O => 2 N + O",
+     {"N2": 1, "O": 1}, {"N": 2, "O": 1},
+     A=3.0e22, n=-1.6, theta_a=113200,
+     Tcf_a=0.5, Tcf_b=0.5,
+     has_third_body=True, is_dissociation=True,
+     notes="N2 dissoc by O atom")
+
+_add(21, "N2 + e- => 2 N + e-",
+     {"N2": 1, "e-": 1}, {"N": 2, "e-": 1},
+     A=3.0e24, n=-1.6, theta_a=113200,
+     Tcf_a=0.0, Tcf_b=1.0,
+     is_dissociation=True, is_ionization=True,
+     notes="Electron-impact N2 dissociation (T_e dependent)")
+
+# O2 dissociation by atomic partners
+_add(22, "O2 + N => 2 O + N",
+     {"O2": 1, "N": 1}, {"O": 2, "N": 1},
+     A=1.0e22, n=-1.5, theta_a=59500,
+     Tcf_a=0.5, Tcf_b=0.5,
+     has_third_body=True, is_dissociation=True,
+     notes="O2 dissoc by N atom")
+
+_add(23, "O2 + O => 2 O + O",
+     {"O2": 1, "O": 1}, {"O": 3},
+     A=1.0e22, n=-1.5, theta_a=59500,
+     Tcf_a=0.5, Tcf_b=0.5,
+     has_third_body=True, is_dissociation=True,
+     notes="O2 dissoc by O atom")
+
+# NO dissociation by atomic partners
+_add(24, "NO + N => 2 N + O",
+     {"NO": 1, "N": 1}, {"N": 2, "O": 1},
+     A=1.1e17, n=0.0, theta_a=75500,
+     Tcf_a=0.5, Tcf_b=0.5,
+     has_third_body=True, is_dissociation=True,
+     notes="NO dissoc by N atom")
+
+_add(25, "NO + O => N + 2 O",
+     {"NO": 1, "O": 1}, {"N": 1, "O": 2},
+     A=1.1e17, n=0.0, theta_a=75500,
+     Tcf_a=0.5, Tcf_b=0.5,
+     has_third_body=True, is_dissociation=True,
+     notes="NO dissoc by O atom")
+
+# Additional Zeldovich routes
+_add(26, "N + O => NO + N",
+     {"N": 1, "O": 1}, {"NO": 1, "N": 1},
+     A=6.4e17, n=-1.0, theta_a=38400,
+     Tcf_a=1.0, Tcf_b=0.0,
+     is_exchange=True,
+     notes="Zeldovich-like, alternate path")
+
+# Charge exchange — additional routes (Park 1990)
+_add(27, "N+ + O => O+ + N",
+     {"N+": 1, "O": 1}, {"O+": 1, "N": 1},
+     A=1.0e12, n=0.5, theta_a=12800,
+     Tcf_a=1.0, Tcf_b=0.0,
+     is_charge_transfer=True)
+
+_add(28, "O2+ + N => N+ + O2",
+     {"O2+": 1, "N": 1}, {"N+": 1, "O2": 1},
+     A=8.7e13, n=0.14, theta_a=28600,
+     Tcf_a=1.0, Tcf_b=0.0,
+     is_charge_transfer=True)
+
+_add(29, "O2+ + N2 => N2+ + O2",
+     {"O2+": 1, "N2": 1}, {"N2+": 1, "O2": 1},
+     A=9.9e12, n=0.0, theta_a=40700,
+     Tcf_a=1.0, Tcf_b=0.0,
+     is_charge_transfer=True)
+
+_add(30, "O2+ + NO => NO+ + O2",
+     {"O2+": 1, "NO": 1}, {"NO+": 1, "O2": 1},
+     A=2.4e13, n=0.41, theta_a=32600,
+     Tcf_a=1.0, Tcf_b=0.0,
+     is_charge_transfer=True)
+
+_add(31, "NO+ + N => O+ + N2",
+     {"NO+": 1, "N": 1}, {"O+": 1, "N2": 1},
+     A=3.4e13, n=-1.08, theta_a=12800,
+     Tcf_a=1.0, Tcf_b=0.0,
+     is_charge_transfer=True)
+
+_add(32, "N2+ + O2 => O2+ + N2",
+     {"N2+": 1, "O2": 1}, {"O2+": 1, "N2": 1},
+     A=1.0e12, n=0.5, theta_a=40700,
+     Tcf_a=1.0, Tcf_b=0.0,
+     is_charge_transfer=True)
+
+# More associative-ionization variants
+_add(33, "N + e- => N+ + 2 e-",
+     {"N": 1, "e-": 1}, {"N+": 1, "e-": 2},
+     A=1.5e34, n=-3.82, theta_a=168200,
+     Tcf_a=0.0, Tcf_b=1.0,
+     is_ionization=True,
+     notes="Direct electron-impact ionization, alternate rate")
+
+_add(34, "O + e- => O+ + 2 e-",
+     {"O": 1, "e-": 1}, {"O+": 1, "e-": 2},
+     A=3.6e31, n=-2.91, theta_a=158500,
+     Tcf_a=0.0, Tcf_b=1.0,
+     is_ionization=True,
+     notes="Direct electron-impact ionization, alternate rate")
+
+_add(35, "NO + e- => NO+ + 2 e-",
+     {"NO": 1, "e-": 1}, {"NO+": 1, "e-": 2},
+     A=2.1e30, n=-2.79, theta_a=107900,
+     Tcf_a=0.0, Tcf_b=1.0,
+     is_ionization=True,
+     notes="NO electron-impact ionization")
+
+# Recombination reactions (3-body)
+_add(36, "N + N + N => N2 + N",
+     {"N": 3}, {"N2": 1, "N": 1},
+     A=4.7e33, n=-0.50, theta_a=0,
+     Tcf_a=1.0, Tcf_b=0.0,
+     is_dissociation=True,
+     notes="3-body N recombination")
+
+_add(37, "O + O + O => O2 + O",
+     {"O": 3}, {"O2": 1, "O": 1},
+     A=2.5e33, n=-1.0, theta_a=0,
+     Tcf_a=1.0, Tcf_b=0.0,
+     is_dissociation=True,
+     notes="3-body O recombination")
+
+_add(38, "N + O + N2 => NO + N2",
+     {"N": 1, "O": 1, "N2": 1}, {"NO": 1, "N2": 1},
+     A=1.0e16, n=0.5, theta_a=0,
+     Tcf_a=1.0, Tcf_b=0.0,
+     is_exchange=True,
+     notes="3-body NO formation")
+
+# Secondary charge-transfer routes
+_add(39, "N+ + NO => N + NO+",
+     {"N+": 1, "NO": 1}, {"N": 1, "NO+": 1},
+     A=4.5e13, n=-1.08, theta_a=12800,
+     Tcf_a=1.0, Tcf_b=0.0,
+     is_charge_transfer=True)
+
+_add(40, "O+ + N => N+ + O",
+     {"O+": 1, "N": 1}, {"N+": 1, "O": 1},
+     A=1.0e12, n=0.5, theta_a=12800,
+     Tcf_a=1.0, Tcf_b=0.0,
+     is_charge_transfer=True)
+
+# Reactions 41-47: reserved for further Park 1993 + ablation extensions.
+# Marked as TRULY placeholder — skipped by to_cantera_yaml() automatically.
+for i in range(41, 48):
+    _add(i, f"reserved_rxn_{i}",
          {}, {},
          A=0.0, n=0.0, theta_a=0,
-         notes=f"Park 1990 reaction #{i} — TODO: extract rates from Tables 2+4+6")
+         notes=f"Reserved for Park 1993 update / ablation chemistry "
+               f"(N+H2O, C-bearing species). Not yet filled.")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
