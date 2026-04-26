@@ -68,27 +68,79 @@ scoring function, etc.).
   `/tmp/SU2-build-mpi/subprojects/Mutationpp/`.
 
 ### Local repo state (`Desktop/Khorium Hypersonics/plasmanet/`)
-- All recent commits pushed to `yardeli/cadpipe-neural-network` master.
-- `plasmanet/mechanism_search/generator.py` — newly created today,
-  scaffolds Park 47 mechanism (18/47 reactions filled — 19-47 are
-  placeholders that need extracting from Park 1990 Tables 2+4+6).
+- All recent commits pushed to `yardeli/cadpipe-neural-network` master
+  (latest: `c527575` — S-2 thermo fix).
+- `plasmanet/mechanism_search/` — newly created today, full module:
+  - `generator.py` — Park 47 mechanism scaffolding (18/47 reactions
+    filled; placeholders 19-47 are skipped in YAML emission). Now uses
+    `thermo_data.py` for real NASA-9 polynomials in Cantera output.
+  - `geometry.py` — `VehicleGeometry` abstraction (S-8 entry point for
+    the drop-a-CAD-file pipeline). Predefined: RAM_C, APOLLO_CM,
+    FIRE_II, GENERIC_HGV. body_radius_at_x() for sphere_cone, capsule,
+    cylinder, wedge, custom.
+  - `thermo_data.py` — Real NASA-9 polynomial coefficients for all 11
+    AIR-11 species across 200K..1000K..6000K..20000K T ranges.
+  - `scoring.py` — BenchmarkCondition + 4 RAM-C benchmarks + composite
+    scoring. Anchor test passes (reproduces measured AIR-5 −1.59).
+    Refactored to consume VehicleGeometry — no RAM-C hardcoding.
+  - `cantera_evaluator.py` — Normal-shock + dissoc-extent correction
+    + Cantera IdealGasConstPressureReactor + Appleton-Hartree dB.
+    Cosmetic fixes for Cantera 3.2 (clone=False) and CVode-crash
+    survival (flush=True + try/except around sim.advance).
+  - `search_loop.py` — random_search() + genetic_search() + GA with
+    tournament selection / uniform crossover / elitism. bayesian_search()
+    stubbed.
+  - `__init__.py` — full public API surface.
+- `examples/custom_vehicle_example.py` — designer's-eye walkthrough of
+  defining a custom vehicle without modifying framework code.
+- `scripts/validate_scoring_against_air5.py` — anchor test that runs the
+  AIR-5 baseline VTU through `score_candidate('cfd_vtu', ...)` and asserts
+  log10 err matches our prior measurement.
+- `scripts/mpp_air5_to_air11_converter.cpp` — Mutation++-aware C++ EOS
+  converter (kept for AIR-11 dead-end documentation).
 
 ---
 
 ## 3. Critical path forward (what to do next)
 
-The critical path through phase S (Search Framework):
+### Status as of last check-in:
+
+| Task | % | What's working |
+|------|---|----------------|
+| **S-1 Generator** | 50% | Reaction/Mechanism dataclasses, subset() filter, Cantera YAML emitter (with real NASA-9 thermo), SU2 cfg snippet emitter. Park 18/47 reactions filled. |
+| **S-6 Scoring** | ✅ | Anchor test PASSES — reproduces measured AIR-5 log10 err = −1.588 vs −1.590 (diff 0.002). Refactored to use VehicleGeometry — no RAM-C hardcoding. |
+| **S-2 Cantera 0D** | 65% | Pre-chemistry T/P works. **Real NASA-9 thermo wired today** — should let CVode integrate without NaN. VM retest needed. |
+| **S-4 Search loop** | 60% | random_search + genetic_search scaffolded with elitism, tournament, uniform crossover. Blocked on S-2 working end-to-end. |
+| **S-3 PlasmaNet retrain** | 0% | Pending — needs ~50-100 evaluations from S-2 as training data. |
+| **S-5 CFD batch validator** | 0% | Pending — uses /opt/su2-nemo-mpi/ binary built today. |
+| **S-7 Paper draft** | 0% | Pending. |
+| **S-8 CAD → VehicleGeometry** | 5% | Stubbed (`VehicleGeometry.from_step_file()` raises NotImplementedError). Future-work entry point for designer drop-a-CAD-file pipeline. |
+
+### Critical path:
 
 ```
-S-1 Mechanism generator (50% — finish Park 47 next)
-    └─→ S-6 Scoring framework (refactor validate_ram_c_nemo.py into reusable
-                                score() function over all benchmarks)
-        └─→ S-2 Cantera 0D fast evaluator
-            └─→ S-3 PlasmaNet retrained on mechanism axis
-                └─→ S-4 Bayesian / GA search loop
-                    └─→ S-5 Top-K CFD validation via MPI binary
-                        └─→ S-7 Paper draft
+S-1 (50%) ──→ S-6 (✅) ──→ S-2 (65% — VM retest needed)
+                              ↓
+                         S-4 (60%) ──→ S-3 (0%) ──→ S-5 (0%) ──→ S-7
+                                                                   ↑
+                                          S-8 (CAD pipeline) ──────┘
 ```
+
+### Immediate next step
+1. Other instance retests Cantera evaluator on VM with real NASA-9 thermo
+   (commit c527575). If CVode integrates → AIR-7 surrogate produces finite ne.
+2. Compare surrogate ne to AIR-5 CFD baseline (5.17e17 m⁻³) — must agree
+   within 0.5 log10 to be trustworthy for search.
+3. If surrogate validated → unblock S-4 with real evaluator → run first
+   GA search across reaction subsets → find top-K candidates.
+4. CFD-validate top-K via S-5 (using /opt/su2-nemo-mpi/ binary).
+
+### Modularity & vehicle-class extension
+The framework was refactored mid-session to remove all RAM-C hardcoding.
+Designers add new vehicles by instantiating `VehicleGeometry` (or using
+predefined APOLLO_CM_GEOMETRY, FIRE_II_GEOMETRY, GENERIC_HGV_GEOMETRY) and
+attaching it to a `BenchmarkCondition`. See `examples/custom_vehicle_example.py`.
+S-8 will eventually auto-extract this from STEP files.
 
 Each S-task is a roadmap entry in `scripts/make_roadmap_xlsx.py` (look for
 the "Search Framework" rows). Roadmap xlsx is regenerated by running that
