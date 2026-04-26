@@ -34,6 +34,7 @@ from plasmanet.mechanism_search import (
     BENCHMARKS,
     score_candidate,
     genetic_search,
+    random_search,
     save_results,
 )
 from plasmanet.mechanism_search.cantera_evaluator import HAVE_CANTERA
@@ -53,34 +54,41 @@ def run_one(label, base_mechanism=PARK_47, residence_time_s=1e-6,
           f"max_rxn={max_reactions or 'none'}")
     t0 = time.time()
 
-    # If max_reactions is set, pre-filter the base mechanism to enforce it
-    if max_reactions:
-        # Can't really pre-filter randomly during GA; instead, the GA's
-        # subset() naturally selects subsets ≤ N reactions. We post-filter
-        # in scoring.
-        pass
-
-    results = genetic_search(
-        base_mechanism=base_mechanism,
-        evaluator="cantera_0d",
-        evaluator_input_fn=lambda mech: {
-            "mechanism": mech, "residence_time_s": residence_time_s
-        },
-        budget=budget,
-        population_size=population_size,
-        generations=generations,
-        mutation_rate=0.05,
-        elitism=2,
-        tournament_size=3,
-        benchmarks=benchmarks,
-        seed=seed,
-        progress_callback=lambda p: None,
-    )
+    if max_reactions is not None:
+        # Use random_search which natively supports max_reactions constraint;
+        # GA's bitstring representation doesn't enforce a size cap. This gives
+        # us a population of mechanisms with size in [3, max_reactions].
+        results = random_search(
+            base_mechanism=base_mechanism,
+            evaluator="cantera_0d",
+            evaluator_input_fn=lambda mech: {
+                "mechanism": mech, "residence_time_s": residence_time_s
+            },
+            budget=budget,
+            benchmarks=benchmarks,
+            min_reactions=3,
+            max_reactions=max_reactions,
+            seed=seed,
+            progress_callback=lambda p: None,
+        )
+    else:
+        results = genetic_search(
+            base_mechanism=base_mechanism,
+            evaluator="cantera_0d",
+            evaluator_input_fn=lambda mech: {
+                "mechanism": mech, "residence_time_s": residence_time_s
+            },
+            budget=budget,
+            population_size=population_size,
+            generations=generations,
+            mutation_rate=0.05,
+            elitism=2,
+            tournament_size=3,
+            benchmarks=benchmarks,
+            seed=seed,
+            progress_callback=lambda p: None,
+        )
     dt = time.time() - t0
-
-    # Filter for max_reactions constraint if specified
-    if max_reactions:
-        results = [(m, s) for (m, s) in results if m.n_reactions <= max_reactions]
 
     # Statistics
     valid = [r for r in results if r[1].composite_score < float("inf")]
