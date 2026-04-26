@@ -37,6 +37,12 @@ from .cantera_evaluator import (
     evaluate as cantera_0d_evaluate,
     HAVE_CANTERA,
 )
+from .search_loop import (
+    SearchProgress,
+    random_search,
+    genetic_search,
+    save_results,
+)
 
 __all__ = [
     # generator
@@ -49,4 +55,6 @@ __all__ = [
     "log10_err", "db_margin_to_published",
     # cantera
     "cantera_0d_evaluate", "HAVE_CANTERA",
+    # search loop
+    "SearchProgress", "random_search", "genetic_search", "save_results",
 ]
