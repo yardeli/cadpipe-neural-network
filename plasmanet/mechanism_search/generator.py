@@ -193,7 +193,15 @@ class Mechanism:
             lines.append("")
 
         lines.append(f"{self.name}-reactions:")
+        n_skipped = 0
         for r in self.reactions:
+            # Skip placeholder reactions (no rate, no real equation) — they
+            # would emit `equation: placeholder_rxn_N` which Cantera parses
+            # as an undeclared species on the LHS. Real reactions must have
+            # both reactants AND products populated.
+            if r.A <= 0 or not r.reactants or not r.products:
+                n_skipped += 1
+                continue
             lines.append(f"- equation: {r.formula}")
             lines.append(f"  rate-constant:")
             lines.append(f"    A: {r.A:.3e}")
@@ -206,6 +214,9 @@ class Mechanism:
             else:
                 lines.append(f"  note: 'Park controlling-T: Tcf={r.Tcf_a},{r.Tcf_b}'")
             lines.append("")
+        if n_skipped:
+            lines.insert(0, f"# WARNING: {n_skipped} placeholder reactions "
+                            f"skipped — fill A>0 + reactants + products to include")
 
         return "\n".join(lines)
 

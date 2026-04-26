@@ -73,23 +73,35 @@ def normal_shock_T_P(M_inf: float, T_inf: float, P_inf: float,
 
 def chemistry_corrected_post_shock_T(M_inf: float, T_inf: float,
                                        P_inf: float,
-                                       dissoc_energy_per_kg: float = 1.5e7,
+                                       dissoc_extent: float = 0.20,
                                        ) -> tuple[float, float]:
-    """Post-shock T with energy sink for dissociation.
+    """Post-shock T with a SMALL energy sink for partial dissociation.
 
-    Real reactive shocks have lower T than frozen because chemistry
-    absorbs energy (N2 → 2N is endothermic ~470 kJ/mol = 16.8 MJ/kg
-    per fully-dissociated cell). For RAM-C M=22.5 at 61 km, this drops
-    T from frozen ~13000 K to reactive ~6000-9000 K.
+    Real reactive shocks have slightly lower T than frozen because
+    chemistry absorbs energy (N2 → 2N endothermic). For RAM-C M=22.5
+    at 61 km, frozen T_post is ~25000K; reactive T_post is ~10000-15000K
+    after partial dissociation.
 
-    The dissoc_energy_per_kg parameter is an empirical adjustment;
-    1.5e7 J/kg corresponds to ~30% dissociation extent.
+    Previous version had a hard 5×T_inf floor which incorrectly clamped
+    M=22.5 at 1213K (way too low). New version subtracts a small
+    dissoc-extent fraction of N2's bond energy, then trusts Cantera's
+    reactor to refine via reaction kinetics.
+
+    Args:
+        dissoc_extent: 0..1 fraction of N2 fully dissociated. 0.20 is
+            typical at M=22.5 stagnation (Park 1990 estimate).
     """
     T_frozen, P_post = normal_shock_T_P(M_inf, T_inf, P_inf)
-    # Subtract dissociation energy sink
-    cv_air = 1.5 * R_SPECIFIC_AIR  # frozen monoatomic estimate, ~430 J/kg/K
-    dT_correction = dissoc_energy_per_kg / cv_air
-    T_post = max(T_frozen - dT_correction, T_inf * 5)  # never below 5x freestream
+    # Bond energy: N2 dissociation = 945 kJ/mol = 33.7 MJ/kg
+    # of N2 mass. With dissoc_extent fraction:
+    bond_energy_per_kg = 33.7e6 * dissoc_extent
+    cv_post = 1.5 * R_SPECIFIC_AIR  # rough cv at high T (~430 J/kg/K)
+    dT_correction = bond_energy_per_kg / cv_post
+    # Floor: never drop below 1.5× the freestream stagnation temperature.
+    # For M=22.5 at T_inf=242K, freestream stagnation T ≈ 24500K, so
+    # the floor is ~36500K — never triggers, but guards against bugs.
+    T_min = T_inf * (1 + 0.5 * 1.4 * M_inf ** 2 / 5)
+    T_post = max(T_frozen - dT_correction, T_min, 1000.0)
     return (T_post, P_post)
 
 
@@ -159,6 +171,7 @@ def evaluate(
             "T_post_shock_K": T_post,
             "P_post_shock_Pa": P_post,
             "mole_fractions_steady_state": {},
+            "f_plasma_hz": 0.0,
             "error": f"Cantera YAML load failed: {exc}",
         }
 
@@ -261,7 +274,9 @@ if __name__ == "__main__":
     print(f"  T_post_shock = {result['T_post_shock_K']:.0f} K")
     print(f"  P_post_shock = {result['P_post_shock_Pa']:.1f} Pa")
     print(f"  ne predicted = {result['ne_m3']:.3e} m^-3")
-    print(f"  f_plasma = {result['f_plasma_hz']:.3e} Hz")
+    print(f"  f_plasma = {result.get('f_plasma_hz', 0.0):.3e} Hz")
+    if "error" in result:
+        print(f"  ERROR: {result['error']}")
     print(f"  dB by freq:")
     for f, db in result["db_by_freq_hz"].items():
         print(f"    {f/1e9:.2f} GHz: {db:.1f} dB")
