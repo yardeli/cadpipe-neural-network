@@ -190,10 +190,31 @@ def evaluate(
 
     gas.TPY = T_post, P_post, Y_init
 
+    # Print pre-chemistry diagnostic with flush=True so it survives a
+    # Cantera CVode crash mid-integration (per other-instance feedback)
+    print(f"[cantera_evaluator] Pre-chemistry: T_post = {T_post:.0f} K, "
+          f"P_post = {P_post:.1f} Pa, gas.species = {gas.n_species}",
+          flush=True)
+
     # ── 5. Integrate Cantera reactor
-    reactor = ct.IdealGasConstPressureReactor(gas)
+    # Note: clone= keyword required in Cantera 3.2 to silence deprecation
+    try:
+        reactor = ct.IdealGasConstPressureReactor(gas, clone=False)
+    except TypeError:
+        # Cantera < 3.2 doesn't have the clone kwarg
+        reactor = ct.IdealGasConstPressureReactor(gas)
     sim = ct.ReactorNet([reactor])
-    sim.advance(residence_time_s)
+    try:
+        sim.advance(residence_time_s)
+    except Exception as exc:
+        return {
+            "ne_m3": 0.0, "db_by_freq_hz": {},
+            "T_post_shock_K": T_post, "P_post_shock_Pa": P_post,
+            "mole_fractions_steady_state": {sp: float(gas.X[i])
+                                              for i, sp in enumerate(gas.species_names)},
+            "f_plasma_hz": 0.0,
+            "error": f"Cantera reactor advance failed: {exc}",
+        }
 
     # ── 6. Extract electron number density
     # ne (m^-3) = mole_fraction_e * total_number_density

@@ -177,19 +177,18 @@ class Mechanism:
         lines.append(f"  kinetics: gas")
         lines.append(f"  reactions: [{self.name}-reactions]")
         lines.append("")
+        from .thermo_data import NASA9_THERMO, emit_cantera_thermo_yaml_block
+
         lines.append("species:")
         for sp in self.species:
             lines.append(f"- name: {sp}")
             lines.append(f"  composition: {{{_composition_for(sp)}}}")
-            # NASA-9 thermo could go here; for now placeholder
-            lines.append(f"  thermo:")
-            lines.append(f"    model: NASA9")
-            lines.append(f"    note: 'placeholder — link to NASA polynomial DB'")
-            lines.append(f"    temperature-ranges: [200, 1000, 6000, 20000]")
-            lines.append(f"    data:")
-            lines.append(f"      - [0, 0, 0, 0, 0, 0, 0, 0, 0]  # PLACEHOLDER")
-            lines.append(f"      - [0, 0, 0, 0, 0, 0, 0, 0, 0]")
-            lines.append(f"      - [0, 0, 0, 0, 0, 0, 0, 0, 0]")
+            # Real NASA-9 polynomial thermo from thermo_data.py
+            # (Glenn coefficients + Park 1990 ions + ATcT). Falls back to
+            # placeholder (Cp/R = 5/2) for any species not yet in the DB.
+            thermo_block = emit_cantera_thermo_yaml_block(sp, indent="  ")
+            # Strip trailing newline for clean appending
+            lines.append(thermo_block.rstrip())
             lines.append("")
 
         lines.append(f"{self.name}-reactions:")
