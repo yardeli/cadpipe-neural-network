@@ -237,6 +237,40 @@ TASKS = [
     ("F-11", "AIR-7 chemistry development trajectory plot", "Validation Fix", "Done",
      100, "Day 8", "2026-04-25", "2026-04-25", "F-8",
      "scripts/plot_air7_chemistry_dev.py: pulls v7 history.csv from VM, plots species + bulk residuals with limit-cycle annotation. Confirmed chemistry on at iter 2, RhoU plateau at -0.77. Diagnostic for paper figure."),
+    ("F-12", "Mutation++-aware AIR-5→AIR-11 EOS converter (C++)", "Validation Fix", "Done",
+     100, "Day 8", "2026-04-25", "2026-04-25", "—",
+     "scripts/mpp_air5_to_air11_converter.cpp: links libmutation__.so directly, sets state from primitives (T_tr, T_ve, rho_i) and reads back Mutation++-self-consistent (E, E_ve). Confirmed AIR-5 wrote E=+1.84e4 J/m³ but Mutation++ AIR-11 says SAME state is E=−1.08e5 J/m³ (different formation-enthalpy reference). The EOS fix gets iter 0 to start cleanly but a SEPARATE Mutation++ chemistry-source bug at trace electron density still NaN-traps by iter 2. Final negative result: AIR-11 in v7.5.1 has multiple compounding issues, source-level fix required."),
+    ("F-13", "AIR-7 + viscous + non-cat wall validation", "Validation Fix", "Done",
+     100, "Day 8", "2026-04-25", "2026-04-25", "F-9",
+     "Other Claude instance: patched CConfig.cpp:6094-6095 to add AIR-7 to NEMO_NAVIER_STOKES allowlist, built /opt/su2-nemo-mpi-air7v/. Cfg parsed cleanly after fixes (MARKER_CATALYTIC unsupported, INIT_OPTION=TD_CONDITIONS required for NEMO_NS). HEAP CORRUPTION in NEMO_NS preprocessing for AIR-7 species before iter 1 — code-level bug in v7.5.1 transport/coupling code, not patchable. Path abandoned. Patched binary deleted; clean MPI binary preserved at /opt/su2-nemo-mpi/."),
+
+    # ── PIVOT: Aaron's vision — AI-exhaustive chemistry mechanism search ───
+    # The hypersonic CFD validation work above is now reframed as TRAINING
+    # DATA for the actual deliverable: a system that lets AI search through
+    # thousands of chemistry mechanisms automatically against experimental
+    # ground truth. Our 3 mechanism data points (AIR-5, AIR-7, AIR-11
+    # attempt) become anchors; the framework does the rest.
+    ("S-1", "Mechanism generator — programmatic SU2 GAS_MODEL/Cantera config emission", "Search Framework", "Pending",
+     0, "Week 1", "—", "—", "—",
+     "Programmatically vary reaction subsets of Park 1990's full 47-reaction air mechanism. Output: cfg files for SU2-NEMO + Cantera mechanism .yaml files. Enables systematic search over reaction subsets instead of hand-picked AIR-5/7/11. Coupling point with cadpipe DRGEP reduction work."),
+    ("S-2", "Fast evaluator — Cantera 0D + boundary corrections surrogate", "Search Framework", "Pending",
+     0, "Week 1-2", "—", "—", "S-1",
+     "Cantera 0D reactor at sheath conditions (post-shock T,p,U from CFD baseline) → ne field via 1D BL relaxation. ms-scale per evaluation, tractable for 1000s-mechanisms search. Validated against existing CFD ground-truth points (AIR-5, AIR-7) before being used as proxy."),
+    ("S-3", "PlasmaNet-as-mechanism-surrogate", "Search Framework", "Pending",
+     0, "Week 2-3", "—", "—", "S-1, S-2",
+     "Train PlasmaNet on (mechanism subset, freestream conditions) → ne_field. Each training point: one mechanism × one CFD/Cantera evaluation. Once trained, search through mechanism subsets at PlasmaNet inference speed (0.01ms each). Validates top candidates with full CFD."),
+    ("S-4", "Search loop — Bayesian / GA over reaction subsets", "Search Framework", "Pending",
+     0, "Week 2-3", "—", "—", "S-2",
+     "Optimization algorithm over the discrete space of reaction subsets. Score = log10(ne_predicted / ne_J&C_published) + log10(dB_predicted / dB_J&C). Bayesian (sklearn-bayes / botorch) or genetic (DEAP). Output: ranked list of candidate mechanisms by experimental fit."),
+    ("S-5", "Multi-mechanism CFD batch runner — uses MPI binary", "Search Framework", "Pending",
+     0, "Week 3", "—", "—", "S-1 + F-9 (MPI)",
+     "Bash/Python harness that takes mechanism cfg from S-1, launches SU2-NEMO via mpirun -n 16, parses result via validate_ram_c_nemo. Stores in mechanism_search/ run database. Throughput: ~16 runs/day on this VM (1 run = ~1h with MPI). Used to validate top-K from search loop."),
+    ("S-6", "Comparison framework — mechanism scoring vs published data", "Search Framework", "Pending",
+     0, "Week 1-2", "—", "—", "—",
+     "Multi-source ground truth: J&C 1972 (ne, dB attenuation), Grantham 1970 (ne at 47 km), Akey 1972 (RAM-CII free-flight). Compose into a scoring function that any search result can be evaluated against. Publishable contribution: documented benchmark suite for hypersonic chemistry mechanism validation."),
+    ("S-7", "AI-exhausting-search paper draft (Aaron's pitch)", "Search Framework", "Pending",
+     0, "Week 4-5", "—", "—", "S-1..S-6",
+     "Headline: 'AI-exhaustive search for hypersonic plasma chemistry mechanisms.' Methods: search framework + scoring. Results: ranked mechanisms vs RAM-C, FIRE-II, Apollo. Compare to hand-picked Park 1990 standards. Aaron's framing: 'something nobody has ever done before in human history.' Realistic AIAA / J. Spacecraft & Rockets target."),
 
     ("I-6", "Agent tool: analyze_plasma(condition)", "SimOps Infra", "Pending",
      0, "Week 4", "—", "—", "I-3",
