@@ -10,7 +10,9 @@ import { Loader2 } from "lucide-react";
 import { LOSPolarPlot } from "@/components/LOSPolarPlot";
 import { StationProfileChart } from "@/components/StationProfileChart";
 import { LiveMockBadge, type DataSource } from "@/components/LiveMockBadge";
-import { FlightSelectors } from "@/components/FlightSelectors";
+import { FlightSelectors, GEOMETRY_PRESETS, type GeometryPreset } from "@/components/FlightSelectors";
+import { GeometryUpload } from "@/components/GeometryUpload";
+import { ResultsCard } from "@/components/ResultsCard";
 import staticMock from "@/data/mock_los.json";
 import type { LOSData, MultiFreqScanRequest } from "@/types/los";
 import { API_BASE_URL, ANALYZE_PATH } from "@/config";
@@ -18,12 +20,7 @@ import { API_BASE_URL, ANALYZE_PATH } from "@/config";
 const DEFAULT_MACH = 22.5;
 const DEFAULT_ALT = 61;
 
-const RAM_C_VEHICLE = {
-  nose_radius_m: 0.1524,
-  half_angle_deg: 9.0,
-  length_m: 1.295,
-  name: "ram_c",
-} as const;
+const DEFAULT_GEOMETRY: GeometryPreset = GEOMETRY_PRESETS[0]; // RAM-C
 
 const DEFAULT_ANGLES = [
   0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180,
@@ -32,6 +29,7 @@ const DEFAULT_ANGLES = [
 export default function HomePage() {
   const [mach, setMach] = useState<number>(DEFAULT_MACH);
   const [alt, setAlt] = useState<number>(DEFAULT_ALT);
+  const [geometry, setGeometry] = useState<GeometryPreset>(DEFAULT_GEOMETRY);
 
   const [data, setData] = useState<LOSData>(staticMock as unknown as LOSData);
   const [source, setSource] = useState<DataSource>("loading");
@@ -45,7 +43,12 @@ export default function HomePage() {
     setErrorMsg(null);
 
     const request: MultiFreqScanRequest = {
-      vehicle: { ...RAM_C_VEHICLE },
+      vehicle: {
+        nose_radius_m: geometry.nose_radius_m,
+        half_angle_deg: geometry.half_angle_deg,
+        length_m: geometry.length_m,
+        name: geometry.name,
+      },
       flight: { mach, altitude_km: alt },
       aspect_angles_deg: [...DEFAULT_ANGLES],
     };
@@ -56,7 +59,7 @@ export default function HomePage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(request),
-          signal: AbortSignal.timeout(6000),
+          signal: AbortSignal.timeout(15000),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
         const live = (await res.json()) as LOSData;
@@ -90,7 +93,7 @@ export default function HomePage() {
     return () => {
       cancelled = true;
     };
-  }, [mach, alt]);
+  }, [mach, alt, geometry]);
 
   function toggleFreq(i: number) {
     setVisibleFreqs((prev) =>
@@ -103,22 +106,41 @@ export default function HomePage() {
       <div className="mx-auto max-w-3xl space-y-6">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-bold tracking-tight">Analyze</h1>
+            <h1 className="text-xl font-bold tracking-tight">
+              Hypersonic Plasma Analysis
+            </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Aspect-resolved LOS radar attenuation
+              Upload geometry → set flight conditions → get detection report.
+              Re-runs automatically on any input change.
             </p>
           </div>
           <LiveMockBadge source={source} />
         </div>
 
-        <FlightSelectors
-          mach={mach}
-          alt={alt}
-          onMachChange={setMach}
-          onAltChange={setAlt}
-        />
+        {/* Step 1: Geometry */}
+        <GeometryUpload geometry={geometry} onGeometryChange={setGeometry} />
+
+        {/* Step 2: Flight conditions */}
+        <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+          <div className="flex items-baseline justify-between">
+            <h3 className="text-sm font-semibold">2. Flight conditions</h3>
+            <span className="text-xs text-muted-foreground">
+              M = {mach.toFixed(1)} · {alt} km altitude
+            </span>
+          </div>
+          <FlightSelectors
+            mach={mach}
+            alt={alt}
+            geometryName={geometry.name}
+            onMachChange={setMach}
+            onAltChange={setAlt}
+          />
+        </div>
 
         {source === "error" && <ErrorBanner message={errorMsg} />}
+
+        {/* Step 3: Results — only when we have live or fallback data */}
+        {source !== "loading" && data && <ResultsCard data={data} />}
 
         <div className="flex flex-wrap gap-3 items-center rounded-lg border border-border bg-card p-3">
           <span className="text-xs font-medium text-muted-foreground">
@@ -191,30 +213,7 @@ export default function HomePage() {
           </>
         )}
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: "Mach", value: data.meta.mach.toFixed(1) },
-            { label: "Altitude", value: `${data.meta.altitude_km} km` },
-            {
-              label: "nₑ (stag)",
-              value: data.meta.stagnation.ne_m3.toExponential(1) + " m⁻³",
-            },
-            {
-              label: "fₚ",
-              value: `${data.meta.stagnation.fp_GHz.toFixed(1)} GHz`,
-            },
-          ].map(({ label, value }) => (
-            <div
-              key={label}
-              className="rounded-lg border border-border bg-card p-3 text-center"
-            >
-              <div className="text-xs text-muted-foreground">{label}</div>
-              <div className="mt-1 text-sm font-semibold tabular-nums">
-                {value}
-              </div>
-            </div>
-          ))}
-        </div>
+        {/* (Top-line metrics now live in ResultsCard above the chart) */}
 
         {data.meta.stagnation.T_ve_K && (
           <div className="rounded-lg border border-border bg-card p-3">

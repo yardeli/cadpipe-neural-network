@@ -17,9 +17,11 @@ import type { RamCBenchmarkResponse } from "@/types/los";
 import { API_BASE_URL, BENCHMARK_PATH } from "@/config";
 
 export default function BenchmarkPage() {
-  const [data, setData] = useState<RamCBenchmarkResponse>(
-    staticMock as unknown as RamCBenchmarkResponse
-  );
+  // `data` is null while loading so we don't render the chart with stale
+  // mock numbers and then snap to live numbers — that's the "second dot
+  // drops between LOADING and LIVE" effect. Show a skeleton instead and
+  // only paint once we know what the server actually says.
+  const [data, setData] = useState<RamCBenchmarkResponse | null>(null);
   const [source, setSource] = useState<DataSource>("loading");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -96,19 +98,22 @@ export default function BenchmarkPage() {
           </div>
         )}
 
-        <SummaryCard summary={data.summary} />
-
-        <BenchmarkChart cases={data.cases} width={620} height={240} />
-
-        <ComparisonTable cases={data.cases} />
-
-        <p className="text-xs text-muted-foreground">
-          Reference: Jones &amp; Cross 1972 (NASA TN D-6617). Pass criterion:
-          <code className="mx-1 rounded bg-muted px-1">|log10 error| &lt; 0.5</code>
-          (within a factor of ~3.2 of the published n
-          <sub>e</sub>). Generated{" "}
-          <span className="font-mono">{data.generated_at}</span>.
-        </p>
+        {data === null ? (
+          <BenchmarkSkeleton />
+        ) : (
+          <>
+            <SummaryCard summary={data.summary} />
+            <BenchmarkChart cases={data.cases} width={620} height={240} />
+            <ComparisonTable cases={data.cases} />
+            <p className="text-xs text-muted-foreground">
+              Reference: Jones &amp; Cross 1972 (NASA TN D-6617). Pass criterion:
+              <code className="mx-1 rounded bg-muted px-1">|log10 error| &lt; 0.5</code>
+              (within a factor of ~3.2 of the published n
+              <sub>e</sub>). Generated{" "}
+              <span className="font-mono">{data.generated_at}</span>.
+            </p>
+          </>
+        )}
       </div>
     </div>
   );
@@ -176,6 +181,21 @@ function SummaryStat({
       <div className={`mt-1 text-sm font-semibold tabular-nums ${toneClass}`}>
         {value}
       </div>
+    </div>
+  );
+}
+
+function BenchmarkSkeleton() {
+  return (
+    <div
+      data-testid="benchmark-skeleton"
+      className="space-y-3"
+      aria-busy="true"
+      aria-live="polite"
+    >
+      <div className="h-[88px] animate-pulse rounded-lg border border-border bg-card" />
+      <div className="h-[260px] animate-pulse rounded-lg border border-border bg-card" />
+      <div className="h-[420px] animate-pulse rounded-lg border border-border bg-card" />
     </div>
   );
 }
