@@ -214,8 +214,22 @@ def integrate_los(
     Method: trapezoidal rule on equispaced samples of α(s) = 2·k_0·n_i(s) in
     Np/m and β(s) = k_0·(n_r−1) in rad/m. Adaptive refinement near the ne
     maximum catches the thin sheath layer without blowing up cost.
+
+    The initial sampling is non-uniform — dense near s=length (the target /
+    body) and sparse near s=0 (the radar source far away). This biases
+    samples toward where plasma actually exists. With uniform sampling at
+    600 samples over a 3.5 m ray, the 3 mm analytical sheath gets ~0.5
+    samples on average and rays at oblique aspect angles can miss it
+    entirely (returning artifact 0 dB). Cubic-clustered sampling gives
+    ~30% of samples in the last 10% of ray length (near body) so the
+    sheath is reliably hit even for sharp small-nose geometries.
     """
-    s, xyz = ray.sample(n_samples)
+    # Non-uniform sample distribution: dense at target end (s≈length),
+    # sparse near source. Keeps total sample count the same; redistributes.
+    u = np.linspace(0.0, 1.0, n_samples)
+    s_normalized = 1.0 - (1.0 - u) ** 3
+    s = ray.length * s_normalized
+    xyz = ray.origin[None, :] + s[:, None] * ray.direction[None, :]
     ne, nu = field(xyz)
     ne = np.asarray(ne, dtype=np.float64).ravel()
     nu = np.asarray(nu, dtype=np.float64).ravel()
@@ -294,6 +308,17 @@ def scan_aspect(
     integration_length : override for ray length; default = source_distance
     """
     target_position = np.asarray(target_position, dtype=np.float64).reshape(3)
+    # When integration_length is passed, place the source that close to the
+    # target so the ray's full s ∈ [0, length] window stays in the near-field
+    # plasma region. Without this, ray.length=integration_length truncated
+    # the integration to the first integration_length metres FROM the source,
+    # which is far from the body when source_distance >> integration_length —
+    # producing 0 dB at most aspect angles. (Cardinal-angle nonzero values
+    # were coincidental and not physical.)
+    effective_source_distance = (
+        float(integration_length) if integration_length is not None
+        else float(source_distance)
+    )
     results: list[LOSResult] = []
     for ang_deg in angles_deg:
         a = math.radians(float(ang_deg))
@@ -303,12 +328,10 @@ def scan_aspect(
             dir_from_target = np.array([math.cos(a), math.sin(a), 0.0])
         else:
             raise ValueError(f"plane must be 'xz' or 'xy', got {plane}")
-        source = target_position + source_distance * dir_from_target
-        # Ray goes from source TOWARD target
+        source = target_position + effective_source_distance * dir_from_target
+        # Ray goes from source TOWARD target — naturally length = effective_source_distance
         ray = Ray.from_endpoints(source, target_position,
                                  label=f"{plane}_{ang_deg:.0f}deg")
-        if integration_length is not None:
-            ray.length = integration_length
         res = integrate_los(field, ray, f_hz, **kwargs)
         results.append(res)
     return results

@@ -139,16 +139,45 @@ class SheathProfile:
     nose_radius_m: float = RAM_C_NOSE_RADIUS_M
     body_length_m: float = RAM_C_BODY_LENGTH_M
     half_angle_deg: float = RAM_C_HALF_ANGLE_DEG
-    shock_density_ratio: float = 10.0     # ρ₂/ρ₁ at normal shock
+    shock_density_ratio: float = 14.0     # ρ₂/ρ₁ EQUILIBRIUM at hypersonic
     decay_constant_along_body: float = 3.0  # ne decay scale
     T_e_peak_K: float = 6000.0
     n_neutral_peak_m3: float = 5e21
+    mach_freestream: float = 12.0         # used by Billig 1967 in _standoff()
 
     def _standoff(self, s_along_body: float) -> float:
-        """Stand-off distance δ(s): shock-layer thickness at arc-length s."""
-        # Simple model: δ grows from δ_0 ~ R_n·0.06 at nose to ~3×δ_0 at end
-        delta_0 = self.nose_radius_m * 0.06 * self.shock_density_ratio / 10.0
-        return delta_0 * (1.0 + 2.0 * s_along_body / self.body_length_m)
+        """Stand-off distance δ(s): shock-layer thickness at arc-length s.
+
+        At the stagnation point, uses Billig 1967 (AIAA 67-148) for sphere
+        bow-shock standoff:
+
+            δ_frozen / R_n = 0.143 · exp(3.24 / M²)
+
+        with an equilibrium-chemistry correction:
+
+            δ_eq = δ_frozen · (ρ_2_frozen / ρ_2_eq)
+
+        where ρ_2_frozen/ρ_∞ = (γ+1)/(γ-1) = 6 in the strong-shock γ=1.4
+        limit and ρ_2_eq/ρ_∞ ≈ shock_density_ratio (default 14 at high M).
+
+        At Mach 22.5, R_n = 152 mm: Billig δ_eq ≈ 9.4 mm. Earlier versions
+        of this method used δ_0 = R_n·0.06·shock_density_ratio/10 which
+        happened to give a similar number for RAM-C but is off by an
+        order of magnitude for vehicles with very different nose radii.
+
+        Mach is not a free parameter on this dataclass — assume the
+        sheath was instantiated for a hypersonic case (M > 8) where
+        the exp(3.24/M²) factor is small (≤ 1.05); use a representative
+        Mach 12 fallback if the caller hasn't set one.
+        """
+        mach_repr = getattr(self, "mach_freestream", 12.0)
+        delta_frozen_nose = (
+            0.143 * math.exp(3.24 / (mach_repr * mach_repr)) * self.nose_radius_m
+        )
+        rho_ratio_frozen = 6.0
+        delta_eq_nose = delta_frozen_nose * rho_ratio_frozen / self.shock_density_ratio
+        # Same arc-length growth as the legacy model (3x at body end).
+        return delta_eq_nose * (1.0 + 2.0 * s_along_body / self.body_length_m)
 
     def _body_surface(self, s: float) -> tuple[float, float]:
         """Return (r_body, z_body) at arc length s along body axis.

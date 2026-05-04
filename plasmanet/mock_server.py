@@ -322,11 +322,23 @@ def _mock_from_validation_json(
 
     fp = _plasma_freq_ghz(ne)
 
-    # Aspect scan — scale from JSON or compute analytically
+    # Aspect scan — use the JSON's per-angle attenuation table ONLY when the
+    # request's flight condition is close enough to the JSON-baked condition
+    # (M22.5/61km from data/nemo_test/ram_c_validation.json). Otherwise,
+    # fall back entirely to the analytical formula. Mixing JSON values for
+    # cardinal angles with analytical values for intermediate angles
+    # produced the broken-graph artifact: cardinal angles got M22.5/61km
+    # numbers, intermediates got near-zero analytical values, and the
+    # polar plot connected them with zigzag spikes.
+    json_condition_matches = (
+        vj is not None
+        and 22.0 <= mach <= 23.0
+        and 60.0 <= alt <= 62.0
+    )
     freq_key_map = {225e6: "VHF_225", 450e6: "VHF_450", 9.2e9: "X_band", 12e9: "Ku_band"}
     json_key = freq_key_map.get(f_hz)
     json_scan = {}
-    if vj and json_key:
+    if json_condition_matches and json_key:
         band = vj.get("aspect_scan_by_frequency", {}).get(json_key, {})
         for pt in band.get("per_angle", []):
             json_scan[pt["angle_deg"]] = pt["attenuation_db"]
@@ -336,8 +348,11 @@ def _mock_from_validation_json(
         if angle in json_scan:
             db = json_scan[angle]
         else:
-            # Analytical fallback: attenuation ∝ ne × path-length
-            # path length ∝ |sin(angle)| for side-on, 1 for nose-on
+            # Analytical fallback: attenuation ∝ ne × path-length-factor.
+            # Tuned so that at M22.5/61km we recover roughly the JSON-cached
+            # values. The (1 + 50/f_GHz) prefactor accounts for the 1/f²
+            # dependence in the Appleton-Hartree limit, and the 0.5*sin_factor
+            # term gives the lobe shape (low at nose/aft, peak at broadside).
             sin_factor = max(abs(math.sin(math.radians(angle))), 0.05)
             base_db = 50.0 * (ne / 5e20) * (225e6 / f_hz) ** 0.5
             db = base_db * (1.0 - 0.5 * sin_factor)
@@ -499,18 +514,33 @@ def _compute_scan_data(req: "MultiFreqScanRequest") -> dict:
     between the JSON endpoint and the PDF artifact.
     """
     angles = req.aspect_angles_deg or _DEFAULT_ANGLES
-    analyze_req = PlasmaAnalyzeRequest(
-        vehicle=req.vehicle,
-        flight=req.flight,
-        radar=RadarParams(aspect_angles_deg=angles),
-        uncertainty=req.uncertainty,
-    )
 
     frequencies: list[dict] = []
     ku_p05: list[dict] = []
     ku_p95: list[dict] = []
 
+    # Only the Ku band runs the UQ ensemble — its P05/P95 result populates
+    # the purple confidence band on the frontend chart. VHF/X bands disable
+    # UQ to avoid 4x compute cost (chemistry doesn't depend on radar freq).
+    # Cap UQ samples at 16 here regardless of the client's request — 16
+    # is enough to estimate P05/P95 of a noisy ne distribution while
+    # keeping the scan endpoint responsive (~2-3 s for an interactive UI).
+    uq_off = UQConfig(enabled=False, n_samples=req.uncertainty.n_samples)
+    uq_ku = UQConfig(
+        enabled=req.uncertainty.enabled,
+        n_samples=min(req.uncertainty.n_samples, 16),
+    )
     for band in _FREQ_BANDS:
+        is_ku = band["frequency_mhz"] == 12000
+        analyze_req = PlasmaAnalyzeRequest(
+            vehicle=req.vehicle,
+            flight=req.flight,
+            radar=RadarParams(
+                frequency_hz=band["frequency_hz"],
+                aspect_angles_deg=angles,
+            ),
+            uncertainty=uq_ku if is_ku else uq_off,
+        )
         resp = _predict(analyze_req, freq_hz=band["frequency_hz"])
         frequencies.append({
             "label": band["label"],

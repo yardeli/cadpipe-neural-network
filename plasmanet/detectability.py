@@ -192,6 +192,7 @@ def build_sheath_field_from_analysis(
         half_angle_deg=vehicle.half_angle_deg,
         T_e_peak_K=T_e,
         n_neutral_peak_m3=n_total_peak,
+        mach_freestream=analysis.get("mach", 12.0),
     )
 
     def ne_rz(r, z):
@@ -291,7 +292,16 @@ def analyze_detectability(
         f_hz=radar_freq_hz,
         source_distance=integration_length,
         angles_deg=aspect_angles_deg, plane="xz",
-        n_samples=2000,  # dense sampling for thin sheath
+        n_samples=2000,  # 3 mm spacing across the ~6 m integration window.
+                         # The analytical sheath is ~3-30 mm thick depending
+                         # on geometry; coarser sampling (600) caused
+                         # angle-dependent dips when rays at certain aspects
+                         # missed the densest sheath layer (visible as
+                         # non-monotonic 30 dB dips in lobes that should be
+                         # smooth). Combined with the cubic clustering in
+                         # scan_aspect, this gives ~30% of samples in the
+                         # last 10% of ray length — high enough density
+                         # near the body to resolve the sheath robustly.
         adaptive=True,
     )
     att_median = np.array([r.attenuation_db for r in scan_median])

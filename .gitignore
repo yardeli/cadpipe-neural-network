@@ -36,8 +36,26 @@ docs/paper/figures/results_blurb.md
 # checkpoints just hold a curated subset for hand-off / Word doc generation).
 data/checkpoints/
 
-# Model checkpoints (large, regeneratable)
+# Model checkpoints (large, regeneratable). surrogate_v4.pt lives on the
+# GCP VM at /home/yarden/mechanism_search_results/surrogate_v4.pt as the
+# canonical source; we keep a copy in checkpoints/ locally for the
+# Streamlit UI but don't track it in git.
 checkpoints/*.pt
+
+# Search v4 artifacts — 285 MB raw training jsonl + 800 KB phase2 dump
+# are large and regeneratable from scripts/run_search_v4.py. Top-K
+# JSONL summaries (search_v4_top50_v2.jsonl) are small and ARE committed.
+data/search_v4/training_data_v3.jsonl
+data/search_v4/search_v4_phase2_full.json
+
+# CFD run outputs pulled from the GCP VM (each .vtu can be 100+ MB).
+data/cfd_runs/
+data/nemo_test/*.vtu
+
+# Scratch / tmp / one-shot sweep outputs
+data/tmp/
+data/unified_solver_sweep.json
+data/geometry_sweep_result.json
 
 # Keep directory structure
 !data/.gitkeep

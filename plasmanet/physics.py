@@ -32,30 +32,45 @@ def standard_atmosphere(altitude_km):
     """US Standard Atmosphere 1976.
 
     Returns (T_K, p_Pa, rho_kgm3, speed_of_sound_ms).
-    Valid 0-60 km.
+    Valid 0-86 km (7 layers, the canonical USSA76 table).
+
+    Barometric exponent for a layer with lapse rate L is -g/(L·R). The
+    sign of that exponent depends on the SIGN of L:
+        L > 0 (T rising with altitude): exponent is negative
+        L < 0 (T falling with altitude): exponent is positive
+    Earlier versions of this function had the wrong sign in the 51–71 km
+    layer (used -12.2009 where it should be +12.2009), which gave P_inf
+    values ~14× too high in that band — see AUDIT_FINDINGS.md and the
+    unified_hypersonic_solver.py audit. RAM-C reflectometer altitudes
+    (47, 61, 71 km) all sit in or near this band, so the bug propagated
+    into a 14× over-prediction of stagnation ne at those conditions.
     """
     h = altitude_km * 1000.0
     if h < 11000:
         T = 288.15 - 0.0065 * h
-        p = 101325.0 * (T / 288.15) ** 5.2561
+        p = 101325.0 * (T / 288.15) ** 5.2561              # L=-0.0065 → exp +5.26
     elif h < 20000:
         T = 216.65
-        p = 22632.0 * math.exp(-0.00015769 * (h - 11000))
+        p = 22632.06 * math.exp(-0.00015769 * (h - 11000)) # isothermal
     elif h < 32000:
         T = 216.65 + 0.001 * (h - 20000)
-        p = 5474.9 * (T / 216.65) ** (-34.1632)
+        p = 5474.889 * (T / 216.65) ** (-34.1632)          # L=+0.001 → exp -34.16
     elif h < 47000:
         T = 228.65 + 0.0028 * (h - 32000)
-        p = 868.02 * (T / 228.65) ** (-12.2009)
+        p = 868.0187 * (T / 228.65) ** (-12.2009)          # L=+0.0028 → exp -12.20
     elif h < 51000:
         T = 270.65
-        p = 110.91 * math.exp(-0.00015769 * (h - 47000))
+        p = 110.9063 * math.exp(-0.00015769 * (h - 47000)) # isothermal
     elif h < 71000:
         T = 270.65 - 0.0028 * (h - 51000)
-        p = 66.939 * (T / 270.65) ** (-12.2009)
-    else:
+        p = 66.93887 * (T / 270.65) ** (12.2009)           # L=-0.0028 → exp +12.20
+    elif h < 84852:
         T = 214.65 - 0.002 * (h - 71000)
-        p = 3.9564 * (T / 214.65) ** (17.0816)
+        p = 3.956420 * (T / 214.65) ** (17.0816)           # L=-0.002 → exp +17.08
+    else:
+        # Above mesopause: extrapolate as isothermal at T=186.87 K (USSA76 84.85 km)
+        T = 186.87
+        p = 0.3734 * math.exp(-9.80665 * (h - 84852) / (R_AIR * T))
     rho = p / (R_AIR * T)
     a = math.sqrt(1.4 * R_AIR * T)
     return T, p, rho, a
@@ -405,7 +420,53 @@ def radar_status(fp_ghz, radar_freq_ghz=12.0):
         return "DETECTABLE"
 
 
+from functools import lru_cache as _lru_cache
+
+
+@_lru_cache(maxsize=64)
+def _full_analysis_cached_impl(mach, altitude_km, nose_radius_m, use_cantera,
+                                use_neq, stagnation_pressure_model):
+    """Cache-friendly inner implementation. lru_cache requires hashable args
+    and returns the same dict object each hit — callers must not mutate.
+    Used by /analyze_scan to avoid recomputing identical chemistry across
+    the four radar bands (frequency doesn't affect chemistry)."""
+    return _full_analysis_impl(
+        mach=mach, altitude_km=altitude_km, nose_radius_m=nose_radius_m,
+        use_cantera=use_cantera, use_neq=use_neq,
+        stagnation_pressure_model=stagnation_pressure_model,
+    )
+
+
 def full_analysis(mach, altitude_km, nose_radius_m=0.08, use_cantera=True,
+                  use_neq=True, stagnation_pressure_model="pitot"):
+    """Cached front-door for the chemistry analysis. See _full_analysis_impl
+    for the actual computation. Returns a shallow copy so callers can mutate
+    the dict without polluting the cache.
+
+    Geometry independence note (audit-2026-05-04)
+    ---------------------------------------------
+    Under the perfect-gas Pitot model, the stagnation point T and P depend
+    ONLY on (M_∞, T_∞, P_∞) — not on nose radius, body length, or half
+    angle. As a result, the equilibrium ne returned here is the same for
+    every geometry at the same flight condition. This is correct textbook
+    physics, NOT a bug. Geometry-dependent effects (Fay-Riddell heat flux,
+    finite-rate residence time, BL chemistry, Billig bow-shock standoff)
+    are accounted for elsewhere:
+      - Bow-shock standoff: SheathProfile._standoff (Billig 1967)
+      - Sheath profile shape: SheathProfile in plasmanet/ram_c_validation
+      - LOS attenuation through sheath: line_of_sight.scan_aspect
+    The `nose_radius_m` argument here only affects the optional NEQ
+    correction (use_neq=True), which is off by default in clean training
+    pipelines because it's a single-geometry empirical fit.
+    """
+    cached = _full_analysis_cached_impl(
+        mach, altitude_km, nose_radius_m, use_cantera, use_neq,
+        stagnation_pressure_model,
+    )
+    return dict(cached)
+
+
+def _full_analysis_impl(mach, altitude_km, nose_radius_m=0.08, use_cantera=True,
                   use_neq=True, stagnation_pressure_model="pitot"):
     """Complete plasma analysis for one flight condition.
 
