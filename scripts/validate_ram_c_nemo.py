@@ -279,7 +279,7 @@ def main():
               f"{sheath_peak_ne:.2e} m^-3")
         print(f"  Published peak (J&C 1972 reflectometer):  "
               f"{ref['ne_peak_m3']:.2e} m^-3")
-        print(f"  log10 error:  {log10_error:+.2f}  →  {verdict}")
+        print(f"  log10 error:  {log10_error:+.2f}  ->  {verdict}")
     elif ref:
         # Sheath totally undersheath at every station — solution has no
         # downstream plasma. Report this clearly instead of skipping.

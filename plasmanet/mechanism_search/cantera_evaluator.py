@@ -112,7 +112,7 @@ def chemistry_corrected_post_shock_T(M_inf: float, T_inf: float,
 def evaluate(
     mechanism,
     benchmark,
-    residence_time_s: float = 1e-4,    # ~100 us — typical sheath residence at M=22
+    residence_time_s: float = 1e-6,    # 1 us — kinetics regime; see note below
     cantera_yaml_path: Optional[Path] = None,
     use_dissoc_correction: bool = True,
 ) -> dict:
@@ -121,8 +121,10 @@ def evaluate(
     Args:
         mechanism: Mechanism object (from plasmanet.mechanism_search.generator)
         benchmark: BenchmarkCondition (from plasmanet.mechanism_search.scoring)
-        residence_time_s: How long to integrate the reactor; longer = closer
-            to equilibrium. Default 100 us matches sheath flow time.
+        residence_time_s: How long to integrate the reactor. Default 1e-6
+            (1 us) is the kinetics regime where mechanism identity drives ne.
+            10 us / 100 us approach Saha equilibrium and flatten the search
+            signal — only override for sensitivity studies.
         cantera_yaml_path: Optional override; otherwise we generate a temp file
             from mechanism.to_cantera_yaml().
         use_dissoc_correction: Apply chemistry-sink T correction (recommended).
@@ -270,7 +272,7 @@ def register_with_scoring():
 
     def _cantera_evaluator(input_data: dict, benchmark) -> dict:
         mech = input_data.get("mechanism")
-        residence = input_data.get("residence_time_s", 1e-4)
+        residence = input_data.get("residence_time_s", 1e-6)
         if mech is None:
             return {"ne_m3": 0.0, "db_by_freq_hz": {}}
         return evaluate(mech, benchmark, residence_time_s=residence)

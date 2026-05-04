@@ -1,0 +1,58 @@
+{
+  "Park_AIR5": {
+    "n_species": 5,
+    "n_reactions": 22,
+    "score": null,
+    "verdict": "POOR",
+    "per_benchmark": [
+      {
+        "ne_predicted_m3": 0.0,
+        "log10_err_ne": NaN,
+        "score": Infinity
+      },
+      {
+        "ne_predicted_m3": 0.0,
+        "log10_err_ne": NaN,
+        "score": Infinity
+      },
+      {
+        "ne_predicted_m3": 0.0,
+        "log10_err_ne": NaN,
+        "score": Infinity
+      },
+      {
+        "ne_predicted_m3": 0.0,
+        "log10_err_ne": NaN,
+        "score": Infinity
+      }
+    ]
+  },
+  "Park_AIR7": {
+    "n_species": 7,
+    "n_reactions": 26,
+    "score": 6.246239877616267,
+    "verdict": "POOR",
+    "per_benchmark": [
+      {
+        "ne_predicted_m3": 1.3998804908115958e+16,
+        "log10_err_ne": -3.154939034554649,
+        "score": 5.150334274295647
+      },
+      {
+        "ne_predicted_m3": 5.555303377166146e+16,
+        "log10_err_ne": -2.5563222147576563,
+        "score": 4.497941886761973
+      },
+      {
+        "ne_predicted_m3": 1.154410644201816e+16,
+        "log10_err_ne": -2.9376396774994538,
+        "score": 9.034374551799699
+      },
+      {
+        "ne_predicted_m3": 1780013135627797.2,
+        "log10_err_ne": -3.0506067884620425,
+        "score": 8.050606788462042
+      }
+    ]
+  }
+}

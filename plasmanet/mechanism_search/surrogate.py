@@ -147,13 +147,13 @@ class MechanismSurrogate(nn.Module):
     """Neural network surrogate predicting ne_peak from
     (freestream conditions, mechanism fingerprint).
 
-    Architecture: 4 hidden layers × 128 units, SiLU activation, BatchNorm.
-    Output: scalar log10(ne_peak in m^-3). Predict log10 because ne spans
-    10^14 to 10^21 — log-space is naturally numerically well-behaved.
+    Default architecture matches v4: 4 hidden layers × 512 units (819K
+    params), SiLU + BatchNorm, output = scalar log10(ne_peak in m^-3).
+    v3 weights load with the same arch but require hidden_dim=256.
     """
 
     def __init__(self, freestream_dim: int = 4, mechanism_dim: int = 47,
-                  hidden_dim: int = 128, n_layers: int = 4):
+                  hidden_dim: int = 512, n_layers: int = 4):
         if not HAVE_TORCH:
             raise RuntimeError(
                 "MechanismSurrogate requires PyTorch. "
@@ -316,11 +316,15 @@ def train_surrogate(
 # Evaluator backend — wires surrogate into the scoring framework
 # ──────────────────────────────────────────────────────────────────────────────
 
-def register_surrogate_evaluator(model: MechanismSurrogate, name: str = "plasmanet_v2"):
+def register_surrogate_evaluator(model: MechanismSurrogate, name: str = "plasmanet_v4"):
     """Wire a trained surrogate into the scoring framework as an evaluator.
 
-    After this, search_loop can use evaluator='plasmanet_v2' and get
-    inference-speed (sub-ms) evaluations.
+    After this, search_loop can use evaluator='plasmanet_v4' (or whichever
+    name) and get inference-speed (sub-ms) evaluations.
+
+    Default name bumped 2026-04-26 to match v4 weights (factor-of-1.52
+    accuracy, 819K params, 4-layer 512-hidden). v3 weights load with the
+    same arch but require hidden_dim=256 instead of 512.
     """
     if not HAVE_TORCH:
         raise RuntimeError("PyTorch required for surrogate inference.")

@@ -50,6 +50,8 @@ from .search_loop import (
     SearchProgress,
     random_search,
     genetic_search,
+    sobol_bayesian_search,
+    SobolBOResult,
     save_results,
 )
 from .surrogate import (
@@ -78,7 +80,8 @@ __all__ = [
     # cantera
     "cantera_0d_evaluate", "HAVE_CANTERA",
     # search loop
-    "SearchProgress", "random_search", "genetic_search", "save_results",
+    "SearchProgress", "random_search", "genetic_search",
+    "sobol_bayesian_search", "SobolBOResult", "save_results",
     # surrogate (S-3)
     "MechanismFingerprint", "MechanismSurrogate", "TrainingExample",
     "train_surrogate", "register_surrogate_evaluator",

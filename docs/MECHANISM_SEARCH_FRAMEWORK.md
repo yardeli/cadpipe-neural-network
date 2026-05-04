@@ -157,12 +157,51 @@ them iteratively to maximize fit to experiment.
 
 This is what Aaron means by "something nobody has done before."
 
-## Status (updated 2026-04-25)
+## Status (updated 2026-04-26)
 
 - Architecture sketched ✓
 - Existing pieces inventoried ✓
 - AIR-5 + AIR-7 CFD ground truth in hand or queued ✓
 - AIR-11 attempt documented as known-broken-in-v7.5.1 ✓
 - MPI binary built ✓ (10–15× speedup over serial for any future CFD)
-- S-1..S-7 task IDs added to roadmap ✓
-- **Next: build S-1 (mechanism generator) starting now**
+- S-1 mechanism generator ✓ (`plasmanet/mechanism_search/generator.py`,
+  40/47 reactions filled with NASA-9 thermo via `thermo_data.py`)
+- S-2 Cantera 0D evaluator ✓ (`cantera_evaluator.py`, normal shock +
+  IdealGasConstPressureReactor, Appleton-Hartree dB)
+- S-3 surrogate v1/v2/v3/**v4** ✓ — v4 hits **±0.183 log10 MAE
+  (factor of 1.52 of Cantera)** on 134K held-out, weights at
+  `/home/yarden/mechanism_search_results/surrogate_v4.pt`. See
+  `docs/SURROGATE_V4_RESULT.md`.
+- S-4 search loop: random + genetic ✓ (`search_loop.py`); **Sobol/BO
+  TODO** — natural next step now that v4 makes 1M-eval inner loop run
+  in ~10 s instead of ~14 h with Cantera
+- S-5 CFD validator scaffolded ✓ (`cfd_validator.py`, 646 lines, dry-run
+  only — needs v7-finished Cantera-verified shortlist as input)
+- S-6 scoring ✓ (composite via `scoring.py`)
+- S-7 paper drafted ✓ (`docs/PAPER_PlasmaNet_2026.md`)
+- S-8 CAD-to-mesh: stub at `geometry.py:from_step_file()` (deferred)
+- **Next: wire surrogate v4 into search_loop, add Sobol seed + BO outer
+  loop, run 1M-eval search, Cantera-verify top-50**. See
+  `docs/PROMPT_NEXT_INSTANCE_2026-04-26.md`.
+
+### CFD anchor caveat (added 2026-04-27)
+
+**The "v7 ramp converged M22.5 anchor" we've been citing has been disproven**:
+the v7 history.csv reading was the wrong column (electron-density rms vs the
+actual momentum-X rms). v7.5.1 cannot converge M22.5 + AIR-7 — it produces
+a metastable trajectory that drifts to divergence. Built SU2 v8.4.0 which
+does converge the case cold-start with monotonic decay. Re-doing the M22.5
+production run on v8 + Mach-ramp verification is roadmap tasks F-17/F-18/F-20.
+See `docs/CHECKPOINT_2026-04-26.md` §2.6 for full timeline.
+
+**Surrogate v4 results stand**: it was trained against Cantera 0D (reliable),
+not against the v7 CFD anchor.
+
+### v4 unlocks the originally-deferred work
+
+The framework's central bet was: a fast accurate surrogate makes
+combinatorial search tractable. v4 is that surrogate. Search budgets
+that were unaffordable with Cantera (1M evals ≈ 14 h) now cost ~10 s.
+The framework is no longer compute-bound on the search side; it's
+bound on the verification side (top-K Cantera 0D + shortlist SU2-NEMO
+MPI), which is the appropriate place for compute to land.

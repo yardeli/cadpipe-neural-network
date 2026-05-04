@@ -318,23 +318,290 @@ def genetic_search(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Bayesian optimization stub
+# Sobol-seeded Bayesian Optimization (multi-altitude RAM-C trajectory)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def bayesian_search(*args, **kwargs):
-    """Bayesian optimization over reaction subsets.
+@dataclass
+class SobolBOResult:
+    """Output of sobol_bayesian_search.
 
-    Stub. Discrete BO over set membership requires custom kernels
-    (e.g., Hamming-distance-based). Frameworks like botorch / sklearn-bayes
-    support continuous + categorical, but pure-set spaces need custom work.
-    Punted to future sprint.
-
-    For now, use genetic_search() — well-suited to discrete combinatorial
-    spaces and validates against random_search baseline.
+    .evaluated  Sorted list of (Mechanism, ScoringResult), ascending by
+                composite_score — first entry is the best.
+    .metadata   Dict with n_sobol, n_bo, GP marginal likelihoods, wall time,
+                etc. Useful for logging + reproducibility.
     """
-    raise NotImplementedError(
-        "Bayesian search over reaction subsets not yet implemented. "
-        "Use genetic_search() instead.")
+    evaluated: list
+    metadata: dict
+
+
+def _passes_physical_filter(bits, dissoc_mask, ion_mask) -> bool:
+    """Mask must include >=1 dissociation AND >=1 ionization reaction.
+
+    Same physical sanity filter the v3/v4 training data used: a mechanism
+    with no dissociation can't produce radicals; a mechanism with no
+    ionization can't produce electrons. Either failure mode reduces the
+    candidate to a uselessly noisy outlier, so we skip them up-front.
+    """
+    import numpy as np
+    return bool((bits * dissoc_mask).any() and (bits * ion_mask).any())
+
+
+def _bits_to_reaction_ids(bits, valid_ids):
+    """Convert a binary mask over `valid_ids` to the corresponding rxn_id list."""
+    return [valid_ids[i] for i, b in enumerate(bits) if b]
+
+
+def sobol_bayesian_search(
+    base_mechanism: Mechanism = PARK_47,
+    evaluator: str = "plasmanet_v4",
+    evaluator_input_fn: Optional[EvaluatorInputFn] = None,
+    benchmarks: tuple = (
+        "ram_c_47km_M18.5",
+        "ram_c_61km_M22.5",
+        "ram_c_71km_M23.6",
+        "ram_c_81km_M23.9",
+    ),
+    n_sobol: int = 1000,
+    n_bo: int = 5000,
+    residence_time_s: float = 1e-6,
+    seed: int = 42,
+    refit_every: int = 200,
+    pool_size: int = 10000,
+    save_path: Optional[Path] = None,
+    progress_callback: Optional[Callable] = None,
+) -> SobolBOResult:
+    """Sobol-seeded Bayesian Optimization over reaction subsets.
+
+    Stage 1: Sobol low-discrepancy sequence in [0,1]^d (d = number of
+             A>0 reactions in `base_mechanism`). Threshold at 0.5 -> binary
+             mask. Filter out masks lacking either dissociation or ionization
+             reactions. Score all via `evaluator`.
+
+    Stage 2: Fit sklearn GP (Matern-2.5 + WhiteKernel, normalize_y=True)
+             on Sobol observations. Loop n_bo times:
+                 - Generate `pool_size` random valid masks.
+                 - Posterior mean + std -> Expected Improvement (minimize).
+                 - Pick argmax EI. Score it. Append to GP training set.
+                 - Refit GP every `refit_every` iterations (full refit;
+                   sklearn doesn't support incremental fits).
+
+    Args:
+        base_mechanism: Park-47 by default. Reactions with A=0 are skipped.
+        evaluator: Registered evaluator name (default "plasmanet_v4" surrogate).
+        evaluator_input_fn: Optional override for the input dict; the default
+            forwards both the mechanism and `residence_time_s` so Cantera-class
+            evaluators can use the latter.
+        benchmarks: Trajectory points to score against. Default = full RAM-C
+            J&C 1972 4-point trajectory (multi-altitude is the meaningful
+            search target — single-point can be gamed by Saha equilibrium).
+        n_sobol: Number of Sobol seed evaluations.
+        n_bo: Number of BO iterations.
+        residence_time_s: Pinned to 1e-6 by default. Avoids the Saha
+            equilibrium regime where mechanism identity stops mattering.
+        seed: RNG seed for both Sobol and the random pool.
+        refit_every: GP refit cadence (every N BO iterations).
+        pool_size: Candidate pool per BO step for EI argmax.
+        save_path: If set, JSON dump of {metadata, evaluated} to this path.
+        progress_callback: Called after each evaluation with the SearchProgress.
+
+    Returns:
+        SobolBOResult(evaluated=[(mech, result), ...], metadata={...})
+    """
+    import math
+    import time
+    import numpy as np
+    from scipy.stats import qmc, norm
+    from sklearn.gaussian_process import GaussianProcessRegressor
+    from sklearn.gaussian_process.kernels import Matern, WhiteKernel, ConstantKernel
+
+    # Default evaluator_input_fn forwards residence_time_s; Cantera-class
+    # evaluators use it, surrogate-class evaluators ignore the kwarg.
+    if evaluator_input_fn is None:
+        evaluator_input_fn = lambda m: {
+            "mechanism": m,
+            "residence_time_s": residence_time_s,
+        }
+
+    rng = np.random.default_rng(seed)
+    valid_reactions = [r for r in base_mechanism.reactions if r.A > 0]
+    valid_ids = [r.rxn_id for r in valid_reactions]
+    d = len(valid_reactions)
+    if d == 0:
+        raise ValueError("base_mechanism has no A>0 reactions")
+
+    dissoc_mask = np.array([r.is_dissociation for r in valid_reactions], dtype=int)
+    ion_mask = np.array([r.is_ionization for r in valid_reactions], dtype=int)
+
+    progress = SearchProgress()
+    evaluated: list = []
+    bench_list = list(benchmarks)
+
+    t_start = time.monotonic()
+
+    # ─── SOBOL PHASE ─────────────────────────────────────────────────────────
+    sobol = qmc.Sobol(d=d, seed=seed, scramble=True)
+    # Buffer 2x to absorb filter rejects (~13% reject rate at d=40 with
+    # 12 dissoc + 12 ion). Real reject rate is far lower in practice.
+    points = sobol.random(n_sobol * 2)
+    sobol_bits_list: list = []
+    sobol_score_list: list = []
+
+    for p in points:
+        if len(sobol_bits_list) >= n_sobol:
+            break
+        bits = (p >= 0.5).astype(int)
+        if not _passes_physical_filter(bits, dissoc_mask, ion_mask):
+            continue
+        rxn_ids = _bits_to_reaction_ids(bits, valid_ids)
+        mech = base_mechanism.subset(reaction_ids=rxn_ids)
+        mech.name = f"sobol_{len(sobol_bits_list):04d}_n={int(bits.sum())}"
+        result = _evaluate(mech, evaluator, evaluator_input_fn,
+                           bench_list, progress)
+        sobol_bits_list.append(bits)
+        sobol_score_list.append(result.composite_score)
+        evaluated.append((mech, result))
+        if progress_callback:
+            progress_callback(progress)
+
+    # ─── GP FIT (initial) ────────────────────────────────────────────────────
+    X_train = np.array(sobol_bits_list, dtype=float)
+    y_train = np.array(sobol_score_list, dtype=float)
+    finite = np.isfinite(y_train)
+    if finite.sum() < 5:
+        # Not enough finite scores to fit a GP; abort BO phase.
+        evaluated.sort(key=lambda pair: pair[1].composite_score)
+        return SobolBOResult(
+            evaluated=evaluated,
+            metadata={
+                "error": "insufficient finite Sobol scores for GP fit",
+                "n_finite_sobol": int(finite.sum()),
+                "total_wall_time_s": time.monotonic() - t_start,
+            },
+        )
+    X_fit = X_train[finite]
+    y_fit = y_train[finite]
+
+    kernel = (ConstantKernel(1.0, (1e-3, 1e3))
+              * Matern(length_scale=1.0, length_scale_bounds=(1e-2, 1e2), nu=2.5)
+              + WhiteKernel(noise_level=1e-2, noise_level_bounds=(1e-6, 1.0)))
+    gp = GaussianProcessRegressor(
+        kernel=kernel, normalize_y=True, n_restarts_optimizer=0, random_state=seed,
+    )
+    gp.fit(X_fit, y_fit)
+    gp_lml_init = float(gp.log_marginal_likelihood_value_)
+
+    # ─── BO LOOP ─────────────────────────────────────────────────────────────
+    best_score = float(y_fit.min())
+    n_refits = 1
+
+    for it in range(n_bo):
+        if it % 100 == 0:
+            import time as _time
+            print(f"[bo] iter {it}/{n_bo} elapsed={_time.monotonic()-t_start:.0f}s best={best_score:+.4f} N_train={len(X_fit)}", flush=True)
+        # Sample a pool of random valid masks for EI argmax.
+        pool_bits: list = []
+        attempts = 0
+        max_attempts = pool_size * 4
+        while len(pool_bits) < pool_size and attempts < max_attempts:
+            mask = rng.integers(0, 2, size=d)
+            if _passes_physical_filter(mask, dissoc_mask, ion_mask):
+                pool_bits.append(mask)
+            attempts += 1
+        if not pool_bits:
+            break  # rare; means the filter is too tight for this base mech
+        pool = np.asarray(pool_bits, dtype=float)
+
+        mu, sigma = gp.predict(pool, return_std=True)
+        sigma = np.maximum(sigma, 1e-9)
+
+        # Expected Improvement (minimization variant):
+        #   improvement = best - mu
+        #   z = improvement / sigma
+        #   EI = improvement * Phi(z) + sigma * phi(z), clipped to >=0
+        improvement = best_score - mu
+        z = improvement / sigma
+        ei = improvement * norm.cdf(z) + sigma * norm.pdf(z)
+        ei = np.where(improvement > 0, ei, 0.0)
+
+        if ei.max() <= 0.0:
+            pick = int(np.argmin(mu))   # fallback when no apparent improvement
+        else:
+            pick = int(np.argmax(ei))
+
+        bits = pool[pick].astype(int)
+        rxn_ids = _bits_to_reaction_ids(bits, valid_ids)
+        mech = base_mechanism.subset(reaction_ids=rxn_ids)
+        mech.name = f"bo_{it:04d}_n={int(bits.sum())}"
+        result = _evaluate(mech, evaluator, evaluator_input_fn,
+                           bench_list, progress)
+        evaluated.append((mech, result))
+
+        if math.isfinite(result.composite_score):
+            X_fit = np.vstack([X_fit, bits.reshape(1, -1).astype(float)])
+            y_fit = np.append(y_fit, result.composite_score)
+            if result.composite_score < best_score:
+                best_score = result.composite_score
+
+        if (it + 1) % refit_every == 0:
+            gp.fit(X_fit, y_fit)
+            n_refits += 1
+
+        if progress_callback:
+            progress_callback(progress)
+
+    # Final refit if last batch was partial
+    if n_bo % refit_every != 0 and n_bo > 0:
+        gp.fit(X_fit, y_fit)
+        n_refits += 1
+
+    t_total = time.monotonic() - t_start
+
+    evaluated.sort(key=lambda pair: pair[1].composite_score)
+
+    metadata = {
+        "n_sobol_requested": n_sobol,
+        "n_sobol_evaluated": len(sobol_bits_list),
+        "n_bo": n_bo,
+        "n_evaluated_total": len(evaluated),
+        "best_score": float(evaluated[0][1].composite_score) if evaluated else None,
+        "best_mechanism_name": evaluated[0][0].name if evaluated else None,
+        "best_n_reactions": (len(evaluated[0][0].reactions) if evaluated else None),
+        "gp_log_marginal_likelihood_init": gp_lml_init,
+        "gp_log_marginal_likelihood_final": float(gp.log_marginal_likelihood_value_),
+        "gp_n_refits": n_refits,
+        "gp_n_train_final": int(len(X_fit)),
+        "total_wall_time_s": float(t_total),
+        "evaluator": evaluator,
+        "benchmarks": bench_list,
+        "residence_time_s": residence_time_s,
+        "seed": seed,
+        "search_dim": d,
+        "n_dissociation_in_base": int(dissoc_mask.sum()),
+        "n_ionization_in_base": int(ion_mask.sum()),
+        "pool_size": pool_size,
+        "refit_every": refit_every,
+    }
+
+    if save_path is not None:
+        save_path = Path(save_path)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        with save_path.open("w") as f:
+            json.dump({
+                "metadata": metadata,
+                "evaluated": [
+                    {
+                        "name": m.name,
+                        "n_reactions": len(m.reactions),
+                        "composite_score": r.composite_score,
+                        "verdict": getattr(r, "verdict", None),
+                    }
+                    for m, r in evaluated
+                ],
+            }, f, indent=2)
+
+    return SobolBOResult(evaluated=evaluated, metadata=metadata)
+
+
 
 
 # ──────────────────────────────────────────────────────────────────────────────
