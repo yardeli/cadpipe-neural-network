@@ -131,6 +131,45 @@ class MeshGeometry:
         radii = np.linalg.norm(slice_pts[:, 1:3], axis=1)
         return float(np.max(radii))
 
+    def axial_stations(self, n: int = 100) -> list[float]:
+        bbox = self.bounding_box()
+        L = bbox.length_m
+        x0 = bbox.xmin
+        n = max(n, 2)
+        out = []
+        for i in range(n):
+            theta = math.pi * i / (n - 1)
+            out.append(x0 + 0.5 * L * (1.0 - math.cos(theta)))
+        return out
+
+    def local_radius(self, x_m: float) -> float:
+        return self.body_radius_at_axial_station(x_m)
+
+    def local_curvature(self, x_m: float) -> float:
+        """Numerical curvature from finite differences on the radius profile."""
+        bbox = self.bounding_box()
+        h = max(0.005 * bbox.length_m, 1e-3)
+        r0 = self.body_radius_at_axial_station(x_m - h)
+        r1 = self.body_radius_at_axial_station(x_m)
+        r2 = self.body_radius_at_axial_station(x_m + h)
+        if r1 <= 0:
+            return 0.0
+        d2r_dx2 = (r0 - 2.0 * r1 + r2) / (h * h)
+        # κ = |r''| / (1 + r'^2)^(3/2)  for r(x) curve in r-x plane
+        dr_dx = (r2 - r0) / (2 * h)
+        denom = (1.0 + dr_dx * dr_dx) ** 1.5
+        return abs(d2r_dx2) / denom
+
+    def surface_angle(self, x_m: float) -> float:
+        """Numerical surface tangent angle from r(x) slope."""
+        bbox = self.bounding_box()
+        h = max(0.005 * bbox.length_m, 1e-3)
+        r1 = self.body_radius_at_axial_station(x_m - h)
+        r2 = self.body_radius_at_axial_station(x_m + h)
+        dr_dx = (r2 - r1) / (2 * h)
+        # Surface angle relative to body axis
+        return math.atan(abs(dr_dx))
+
     def effective_half_angle_deg(self) -> float:
         """Effective afterbody half-angle from the slope of the body envelope."""
         if self._half_angle_deg is None:

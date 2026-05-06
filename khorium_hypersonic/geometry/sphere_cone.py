@@ -65,3 +65,51 @@ class SphereCone:
 
     def effective_half_angle_deg(self) -> float:
         return self.half_angle_deg
+
+    # ── Axial-resolved interface ──────────────────────────────────────
+
+    def axial_stations(self, n: int = 100) -> list[float]:
+        """Cosine-spaced sampling: dense near the nose, coarser aft.
+
+        x_i = (L/2) · (1 - cos(π i/(n-1)))   for i = 0..n-1
+        gives a Chebyshev-1 distribution that's much denser near the
+        rapidly-varying spherical nose than uniform spacing would be.
+        """
+        n = max(n, 2)
+        out = []
+        for i in range(n):
+            theta = math.pi * i / (n - 1)
+            out.append(0.5 * self.length_m * (1.0 - math.cos(theta)))
+        return out
+
+    def local_radius(self, x_m: float) -> float:
+        return self.body_radius_at_axial_station(x_m)
+
+    def local_curvature(self, x_m: float) -> float:
+        """Spherical nose: κ = 1/R_n. Conical afterbody: κ ≈ 0
+        (meridional curvature; ignores axisymmetric circumferential).
+        """
+        ha = math.radians(self.half_angle_deg)
+        x_tang = self.nose_radius_m * (1.0 - math.sin(ha))
+        if x_m <= x_tang:
+            return 1.0 / max(self.nose_radius_m, 1e-12)
+        return 0.0
+
+    def surface_angle(self, x_m: float) -> float:
+        """Angle between surface tangent and body axis (radians).
+
+        Spherical nose: angle increases from 0 at nose to (π/2 −
+        half_angle) at the tangent point. Conical afterbody: equals
+        half_angle.
+        """
+        ha = math.radians(self.half_angle_deg)
+        x_tang = self.nose_radius_m * (1.0 - math.sin(ha))
+        if x_m <= 0:
+            return math.pi / 2.0     # at nose tip, surface ⊥ axis
+        if x_m <= x_tang:
+            # On the spherical nose, theta = arccos((R_n - x)/R_n)
+            # surface tangent angle = π/2 - theta
+            cos_theta = max(min((self.nose_radius_m - x_m) / self.nose_radius_m, 1.0), -1.0)
+            theta = math.acos(cos_theta)
+            return math.pi / 2.0 - theta
+        return ha

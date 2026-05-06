@@ -71,3 +71,42 @@ class Geometry(Protocol):
         `half_angle_deg` as a positional field without name collision.
         """
         ...
+
+    # ── Axial-resolved interface (v0.3.0+) ────────────────────────────
+    # Used by core.flowfield for geometry-aware axial profiles. Adapters
+    # that don't implement these inherit safe default fallbacks via
+    # core.flowfield._axial_stations_default.
+
+    def axial_stations(self, n: int = 100) -> list[float]:
+        """Sample n axial coordinates from nose to aft, biased toward
+        the nose where curvature changes fastest (Chebyshev or sine spacing
+        recommended). Default uniform spacing if not overridden."""
+        ...
+
+    def local_radius(self, x_m: float) -> float:
+        """Body radius perpendicular to the axis at axial station x.
+
+        Alias for body_radius_at_axial_station; provided for the v0.3.0
+        flowfield API consistency.
+        """
+        ...
+
+    def local_curvature(self, x_m: float) -> float:
+        """1/radius_of_curvature at axial station x (1/m).
+
+        For a spherical nose, equals 1/R_n. For a conical afterbody,
+        approaches 0 (flat in the meridional sense). Drives local shock
+        standoff scaling for non-spherical regions of the body.
+        """
+        ...
+
+    def surface_angle(self, x_m: float) -> float:
+        """Angle between the body surface and the freestream flow (rad).
+
+        At the stagnation point, surface_angle ≈ π/2 (normal). On the
+        conical afterbody, surface_angle = half_angle_deg in radians.
+        Used to switch between normal-shock (blunt regions where angle
+        > 30°) and oblique-shock (slender regions) approximations in
+        core.flowfield.
+        """
+        ...

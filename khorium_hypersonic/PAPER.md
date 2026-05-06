@@ -1,7 +1,7 @@
 # khorium_hypersonic: A Geometry-Agnostic Hypersonic Plasma Solver with AI-Exhaustive Chemistry-Reaction Search
 
 **Authors**: Khorium AI
-**Version**: 0.1.0
+**Version**: 0.3.0
 **Status**: Draft — internal review
 
 ---
@@ -337,6 +337,21 @@ Known limitations:
    live downstream — this solver provides the plasma-attenuation
    input to that calculation.
 
+## 4a. Positioning (v0.3.0 framing)
+
+Per the strategy document: this is not a generic CFD solver. It is a
+**Hypersonic Plasma Observability Engine** — its job is to predict
+detectability and identify communication blackout conditions early in
+design, before expensive CFD sweeps are committed to. The pitch:
+
+> "CFD tells you what happens. This system tells you what matters —
+> and which assumptions are wrong."
+
+The differentiator is treating chemistry as a **search space** rather
+than a fixed-mechanism assumption (Section 2.4), and coupling
+**geometry → standoff → residence-time → ionization → RF attenuation**
+as one pipeline rather than a chain of disconnected hand-offs.
+
 ## 5. Improvements landed in v0.2.0
 
 1. **Fay-Riddell stagnation heating** (`core.heat_transfer`) — closed-
@@ -365,6 +380,90 @@ Known limitations:
 5. **Expanded CFD sheath adapter** (`sheath.from_cfd`) — auto-detect
    solver type from vtu metadata, support OpenFOAM/Eilmer/SU2-NEMO,
    richer documentation.
+
+## 5a. Improvements landed in v0.3.0
+
+The four upgrades in v0.3.0 promote the package from "stagnation-point
+estimator" to "geometry-resolved, kinetics-aware, trajectory-capable
+plasma prediction engine" — directly responsive to the strategic
+direction in the Khorium hypersonic-solver positioning document.
+
+1. **Boundary layer + viscous heating** (`core.boundary_layer`).
+   Full Fay-Riddell (1958) stagnation heat flux with edge / wall
+   property splits, Pr / Le corrections, and a dissociation-enthalpy
+   contribution. Compressible-laminar BL thickness scaling
+   δ(x) ~ √(μ_e x / (ρ_e U_e)) and stagnation-region scaling
+   δ_stag ~ √(μ_e R_n / (ρ_e U_∞)). An ne(y) profile correction
+   `apply_boundary_layer_correction` decays from edge ne to a
+   wall_fraction ≈ 5% of edge value across δ. Closes the
+   inviscid-Euler stagnation-to-wall ne gap that the v0.2.0 path had.
+
+   Validated bluntness sweep at M=22.5 / 61 km:
+       sharp_narrow R_n= 20mm  q_w=7.45 MW/m²
+       ram_c        R_n=152mm  q_w=2.70 MW/m²
+       capsule      R_n=300mm  q_w=1.92 MW/m²
+   Ratio sharp/capsule = 3.88 = √(300/20) → exact Fay-Riddell scaling.
+
+2. **Geometry-aware axial flowfield** (`core.flowfield`). Replaces the
+   "everything collapses to scalar R_n" mode with a 50–200-station
+   axial sweep. Each station gets its own surface angle, local
+   curvature, local shock kind (normal vs oblique using a 30° surface-
+   angle threshold), edge state (T_e, P_e, ρ_e, U_e), local sheath
+   thickness from Billig on the local effective radius, residence
+   time τ(x) = δ(x) / U_e(x), and chemistry-mode-driven ne(x).
+
+   The `Geometry` Protocol gained four new methods —
+   `axial_stations(n)`, `local_radius(x)`, `local_curvature(x)`,
+   `surface_angle(x)` — implemented for SphereCone (closed-form via
+   curvature math, cosine-spaced sampling biased toward the nose) and
+   for MeshGeometry (numerical via finite differences on the radius
+   profile). Output is an `AxialProfile` carrying per-station detail.
+
+   Validated axial profile for RAM-C M=22.5 / 61 km (8 stations):
+       x=  0.0mm  normal-shock  T_e=6196K  τ= 7.9µs  ne=1.71e+20
+       x= 64.1mm  normal-shock  T_e=6196K  τ= 7.9µs  ne=1.71e+20
+       x=243.8mm  oblique 9°    T_e=1163K  τ= 1.5µs  ne~0
+       …
+   ne is geometry-resolved instead of a single value.
+
+3. **Finite-rate, geometry-coupled chemistry** (`core.kinetics`).
+   New `cantera_residence_time_ne_batch` for vectorized evaluation
+   across all 50–200 axial stations in one Cantera state-set loop
+   with reactor reuse. New `select_chemistry_mode` centralises the
+   adaptive-mode selection logic so solver, flowfield, and trajectory
+   all behave consistently:
+       - τ > 1 ms       → equilibrium (Saha closed-form)
+       - 40 km–90 km    → surrogate if v4 weights loaded
+       - τ ~ µs         → kinetics (Cantera 0D constant-pressure reactor)
+       - else           → equilibrium fallback
+
+   Chemistry now genuinely depends on the local geometry through τ(x),
+   not on the stagnation point alone.
+
+4. **Trajectory-level simulation** (`solver_trajectory`). New
+   `TrajectoryPoint(t, mach, altitude_km, AoA)` dataclass and
+   `solve_trajectory(trajectory, geometry, ...)` driver that walks
+   each waypoint through the pointwise solver and assembles a
+   `TrajectoryResult` carrying per-waypoint ne, q_w, residence time,
+   per-band peak attenuation, status, and a list of contiguous
+   `BlackoutInterval`s with start/end times and peak attenuation.
+
+   Validated 5-point reentry trajectory (M=24/85km → M=10/35km):
+       t=  0.0s  M=24.0  h=85km   ne=6.4e+16  Ku= 0 dB DETECTABLE
+       t= 20.0s  M=23.6  h=71km   ne=1.9e+19  Ku=124 dB BLACKOUT
+       t= 40.0s  M=22.5  h=61km   ne=2.7e+20  Ku=678 dB BLACKOUT
+       t= 60.0s  M=18.5  h=47km   ne=4.2e+20  Ku=881 dB BLACKOUT
+       t= 80.0s  M=10.0  h=35km   ne=1.5e+16  Ku= 0 dB DETECTABLE
+   Blackout window 20s–80s identified, peak Ku-band 881 dB.
+
+5. **Uncertainty quantification** (`uncertainty.monte_carlo`). New
+   `UncertaintyConfig` + `run_monte_carlo` that perturbs three
+   independent axes — chemistry rate constants (log-normal, σ=0.3 in
+   log10), freestream T (normal, σ=3%), freestream ρ (normal, σ=5%) —
+   and runs N (default 30) solver evaluations. Returns mean,
+   std, P05/P95, worst-case (P99) ne; per-band atten mean / std;
+   per-band blackout probability. With the surrogate evaluator the
+   30-sample MC adds ~1.5 s on top of a single-point solve.
 
 ## 6. Next steps
 

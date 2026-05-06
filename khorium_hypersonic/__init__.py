@@ -34,19 +34,38 @@ All physics is documented inline against textbook references (Anderson
 Aerothermodynamics", Bertin 1994 "Hypersonic Aerothermodynamics",
 Billig 1967 AIAA 67-148, Fay-Riddell 1958, USSA76 NASA TN-1976).
 """
-__version__ = "0.1.0"
+_OLD_VERSION = "0.1.0"
 
 from .solver import HypersonicSolver, SolverInput, SolverOutput
+from .solver_trajectory import (
+    TrajectoryPoint, TrajectoryResult, BlackoutInterval, solve_trajectory,
+)
 from .geometry import (
     Geometry, SphereCone, Capsule, MeshGeometry, GEOMETRY_PRESETS,
 )
 from .chemistry import Mechanism, PARK_47
 from .search import exhaustive_search, sobol_bayesian_search, genetic_search
+from .core.flowfield import compute_axial_profile, AxialProfile, AxialStation
+from .core.boundary_layer import bl_summary, fay_riddell_full
+from .uncertainty import UncertaintyConfig, MonteCarloResult, run_monte_carlo
+
+__version__ = "0.3.0"
 
 __all__ = [
     "__version__",
+    # Pointwise solver
     "HypersonicSolver", "SolverInput", "SolverOutput",
+    # Trajectory simulator
+    "TrajectoryPoint", "TrajectoryResult", "BlackoutInterval", "solve_trajectory",
+    # Geometry
     "Geometry", "SphereCone", "Capsule", "MeshGeometry", "GEOMETRY_PRESETS",
+    # Chemistry + search
     "Mechanism", "PARK_47",
     "exhaustive_search", "sobol_bayesian_search", "genetic_search",
+    # Geometry-resolved flowfield
+    "compute_axial_profile", "AxialProfile", "AxialStation",
+    # Boundary layer
+    "bl_summary", "fay_riddell_full",
+    # Uncertainty
+    "UncertaintyConfig", "MonteCarloResult", "run_monte_carlo",
 ]

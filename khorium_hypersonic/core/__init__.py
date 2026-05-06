@@ -26,7 +26,19 @@ from .plasma import (
 )
 from .standoff import billig_sphere_standoff
 from .heat_transfer import fay_riddell_qw, boundary_layer_residence_time_s
-from .kinetics import cantera_residence_time_ne
+from .kinetics import (
+    cantera_residence_time_ne, cantera_residence_time_ne_batch,
+    select_chemistry_mode,
+)
+from .boundary_layer import (
+    air_viscosity, fay_riddell_full,
+    bl_thickness_compressible_laminar, bl_thickness_stagnation,
+    apply_boundary_layer_correction, bl_summary,
+)
+from .flowfield import (
+    AxialStation, AxialProfile,
+    compute_axial_profile, axial_profile_to_field, oblique_shock_post,
+)
 
 __all__ = [
     "standard_atmosphere",
@@ -37,5 +49,11 @@ __all__ = [
     "appleton_hartree_attenuation_dB", "cutoff_ne_for_freq",
     "billig_sphere_standoff",
     "fay_riddell_qw", "boundary_layer_residence_time_s",
-    "cantera_residence_time_ne",
+    "cantera_residence_time_ne", "cantera_residence_time_ne_batch",
+    "select_chemistry_mode",
+    "air_viscosity", "fay_riddell_full",
+    "bl_thickness_compressible_laminar", "bl_thickness_stagnation",
+    "apply_boundary_layer_correction", "bl_summary",
+    "AxialStation", "AxialProfile",
+    "compute_axial_profile", "axial_profile_to_field", "oblique_shock_post",
 ]
