@@ -19,14 +19,22 @@ export interface TrajectoryPoint {
 
 const POINTS: TrajectoryPoint[] = trajectoryData.points;
 
-// Distinct, ascending values — matches plasmanet.ram_c_trajectory.trajectory_*().
-export const ALTITUDE_OPTIONS_KM: number[] = Array.from(
-  new Set(POINTS.map((p) => p.altitude_km))
-).sort((a, b) => a - b);
+// Pill-row options. Bigger range than the RAM-C trajectory anchors so
+// the user can sweep Mach 5-25 and altitude 25-90 km, not just the four
+// J&C 1972 reflectometer points. RAM-C anchors are still in the list
+// (marked by being identical to a TrajectoryPoint mach/alt) so the
+// /benchmark page's per-point analysis still hits exact matches.
+export const MACH_OPTIONS: number[] = [
+  5, 8, 10, 12, 15, 18.5, 22.5, 23.6, 23.9, 25,
+];
 
-export const MACH_OPTIONS: number[] = Array.from(
-  new Set(POINTS.map((p) => p.mach))
-).sort((a, b) => a - b);
+export const ALTITUDE_OPTIONS_KM: number[] = [
+  30, 40, 47, 55, 61, 71, 81, 90,
+];
+
+// RAM-C anchor altitudes/Machs — used by the /benchmark page to
+// auto-fetch the canonical comparison.
+export const RAM_C_TRAJECTORY_POINTS: TrajectoryPoint[] = POINTS;
 
 // Vehicle geometry presets — sphere-cone parameters from
 // data/cfd_cases/*/<name>.json. nose_radius_m + half_angle_deg + length_m

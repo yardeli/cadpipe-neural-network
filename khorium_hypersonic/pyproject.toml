@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "khorium-hypersonic"
+version = "0.1.0"
+description = "Geometry-agnostic hypersonic plasma solver + AI-exhaustive chemistry-reaction search framework"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    {name = "Khorium AI"},
+]
+license = {text = "Proprietary"}
+classifiers = [
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "pydantic>=2.0",
+    # Sibling package — the audited primitives the wrapper re-exports.
+    # If KhoriumBackend installs this package, plasmanet must be on the
+    # PYTHONPATH or installed editable too.
+    # "plasmanet @ file:///repo/path/to/plasmanet",
+]
+
+[project.optional-dependencies]
+api = ["fastapi>=0.100", "uvicorn>=0.23"]
+chemistry = ["cantera>=3.0"]
+surrogate = ["torch>=2.0"]
+mesh = ["meshio>=5.3"]
+cad = ["cadquery>=2.4"]
+all = [
+    "fastapi>=0.100", "uvicorn>=0.23",
+    "cantera>=3.0", "torch>=2.0",
+    "meshio>=5.3", "cadquery>=2.4",
+]
+
+[tool.setuptools]
+packages = [
+    "khorium_hypersonic",
+    "khorium_hypersonic.core",
+    "khorium_hypersonic.geometry",
+    "khorium_hypersonic.sheath",
+    "khorium_hypersonic.signals",
+    "khorium_hypersonic.chemistry",
+    "khorium_hypersonic.search",
+    "khorium_hypersonic.api",
+]
