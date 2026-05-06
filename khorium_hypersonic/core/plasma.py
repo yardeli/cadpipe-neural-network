@@ -48,18 +48,28 @@ def appleton_hartree_attenuation_dB(
 ) -> dict:
     """One-way attenuation through a uniform plasma slab.
 
-    Parameters
-    ----------
-    ne_m3 : electron number density (m⁻³)
-    nu_collision_Hz : electron-neutral collision frequency
-    f_Hz : radar carrier frequency
-    path_length_m : thickness of plasma slab the ray traverses
+    Uses the FULL Appleton-Hartree complex refractive index — correct in
+    all three regimes (collisionless evanescent, collisionless
+    propagating, heavily collisional with ν > ω). For an unmagnetized
+    cold plasma:
 
-    Returns
-    -------
-    dict with alpha_dB_per_m, atten_dB, f_p_Hz, regime ('evanescent' or
-    'propagating') and detection_status string ('DETECTABLE'/'DEGRADED'/
-    'BLACKOUT' using 2 dB and 20 dB thresholds).
+        n² = 1 - ω_p² / (ω(ω - iν))
+
+    Splitting into real and imaginary parts:
+        Re(n²) = 1 - ω_p²/(ω² + ν²)
+        Im(n²) = -ω_p² ν / (ω(ω² + ν²))
+
+    Then n_r² = ½[Re(n²) + |n²|], n_i² = ½[-Re(n²) + |n²|], and the
+    power attenuation rate is α = 2·k_0·n_i in nepers/m, ×8.686 for dB/m.
+
+    Regime classification (informational only — formula is unified):
+      'evanescent'    : ω < ω_p, ν << ω_p  (overdense, mostly reflected)
+      'collisional'   : ν > ω               (heavy collision damping;
+                                             α ∝ √(ω·ω_p²/ν) → INCREASES
+                                             with f; this is the regime
+                                             VHF radar through hypersonic
+                                             sheaths typically lives in)
+      'propagating'   : ω > ω_p, ν << ω    (transparent, weak absorption)
     """
     if ne_m3 <= 0:
         return {"alpha_dB_per_m": 0.0, "atten_dB": 0.0,
@@ -67,21 +77,26 @@ def appleton_hartree_attenuation_dB(
                  "detection_status": "DETECTABLE"}
 
     omega_p = math.sqrt(ne_m3 * E_CHARGE**2 / (M_E * EPS_0))
-    omega = 2 * math.pi * f_Hz
+    omega = 2.0 * math.pi * f_Hz
     nu = max(nu_collision_Hz, 1e3)
 
-    if omega < omega_p:
-        # Evanescent: spatial decay ω/c · √(ω_p²/ω² - 1)
-        # (collisionless limit; collisions reduce alpha slightly)
-        k_imag = (omega / C_LIGHT) * math.sqrt(omega_p**2 / omega**2 - 1)
-        alpha_np = k_imag
+    omega_p2 = omega_p * omega_p
+    denom = omega * omega + nu * nu
+    re_n2 = 1.0 - omega_p2 / denom
+    im_n2 = -omega_p2 * nu / (omega * denom)
+    abs_n2 = math.sqrt(re_n2 * re_n2 + im_n2 * im_n2)
+    n_i = math.sqrt(max(0.5 * (-re_n2 + abs_n2), 0.0))
+    k0 = omega / C_LIGHT
+    alpha_np = 2.0 * k0 * n_i      # power, nepers/m
+    alpha_dB = 8.686 * alpha_np    # power, dB/m
+    atten = alpha_dB * path_length_m
+
+    if nu > omega:
+        regime = "collisional"
+    elif omega < omega_p:
         regime = "evanescent"
     else:
-        alpha_np = (omega_p**2 * nu) / (2 * C_LIGHT * (omega**2 + nu**2))
         regime = "propagating"
-
-    alpha_dB = 8.686 * alpha_np
-    atten = alpha_dB * path_length_m
 
     if atten >= 20.0:
         status = "BLACKOUT"

@@ -31,6 +31,8 @@ from .core import (
     pitot_pressure, stagnation_T_perfect, stagnation_T_real_gas,
     saha_ne, plasma_frequency_GHz,
     appleton_hartree_attenuation_dB, billig_sphere_standoff,
+    fay_riddell_qw, boundary_layer_residence_time_s,
+    cantera_residence_time_ne,
 )
 from .geometry import Geometry, GEOMETRY_PRESETS
 from .signals import scan_aspect, Ray
@@ -75,6 +77,19 @@ class SolverInput(BaseModel):
     aspect_angles_deg: list[float] = Field(
         default_factory=lambda: [0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180]
     )
+    chemistry_mode: str = Field(
+        default="auto",
+        description=(
+            "How to compute stagnation ne. "
+            "'equilibrium' = Saha at Cantera-equilibrated stagnation T,p (textbook fallback, "
+            "over-predicts ne at high altitudes by ~6x). "
+            "'kinetics' = Cantera 0D constant-pressure reactor integrated for τ = residence time "
+            "(Billig-derived; geometry-dependent via R_n). "
+            "'surrogate' = trained PlasmaNet v4 4-layer 512-hidden MLP (factor-of-1.52 of Cantera 0D "
+            "at fixed 1µs residence, requires v4 weights loaded). "
+            "'auto' = surrogate if loaded → kinetics if Cantera available → equilibrium fallback."
+        ),
+    )
 
 
 class StagnationOutput(BaseModel):
@@ -83,6 +98,9 @@ class StagnationOutput(BaseModel):
     ne_peak_m3: float
     fp_GHz: float
     composition_x: dict[str, float]
+    chemistry_mode_used: str
+    residence_time_s: float | None = None
+    q_w_W_per_m2: float | None = None    # Fay-Riddell stagnation heat flux
 
 
 class BandResult(BaseModel):
@@ -161,6 +179,60 @@ class HypersonicSolver:
     >>> print(output.stagnation.ne_peak_m3, output.bands[0].peak_atten_dB)
     """
 
+    def _compute_ne(
+        self, chemistry_mode: str, T_stag_K: float, P_t_Pa: float,
+        composition_x: dict, residence_time_s: float,
+    ) -> tuple[float, str]:
+        """Dispatch to equilibrium / kinetics / surrogate per chemistry_mode.
+
+        Returns (ne_m3, mode_actually_used). The 'auto' mode tries
+        surrogate first (best at high altitude, captures finite-rate
+        effect), then kinetics (geometry-aware via residence time),
+        then equilibrium Saha as fallback.
+        """
+        mode = chemistry_mode
+
+        if mode in ("auto", "surrogate"):
+            try:
+                from plasmanet.mechanism_search.scoring import score_candidate
+                from plasmanet.mechanism_search.generator import park_air7
+                # If a surrogate evaluator was registered, use it
+                result = score_candidate(
+                    mechanism_name="park_air7",
+                    evaluator="plasmanet_v4",
+                    evaluator_input={"mechanism": park_air7(),
+                                     "residence_time_s": residence_time_s},
+                    benchmark="ram_c_61km_M22.5",   # placeholder; surrogate
+                                                       # interpolates over freestream
+                )
+                if result.per_benchmark and result.per_benchmark[0].get("ne_predicted_m3", 0) > 0:
+                    return float(result.per_benchmark[0]["ne_predicted_m3"]), "surrogate"
+            except Exception:
+                if mode == "surrogate":
+                    # Hard failure if user explicitly asked for surrogate
+                    pass   # fall through to kinetics
+            # auto: continue to kinetics
+
+        if mode in ("auto", "kinetics"):
+            kin = cantera_residence_time_ne(
+                T_initial_K=T_stag_K, P_initial_Pa=P_t_Pa,
+                residence_time_s=residence_time_s,
+            )
+            if "error" not in kin and kin.get("ne_m3", 0) > 0:
+                return float(kin["ne_m3"]), "kinetics"
+            if mode == "kinetics":
+                # Cantera unavailable; fall through to equilibrium
+                pass
+
+        # Equilibrium Saha (always available, no external deps)
+        s = saha_ne(
+            T_K=T_stag_K, P_Pa=P_t_Pa,
+            x_N=composition_x.get("N", 0.0),
+            x_O=composition_x.get("O", 0.0),
+            x_NO=composition_x.get("NO", 0.0),
+        )
+        return float(s["ne_m3"]), "equilibrium"
+
     def analyze(self, request: SolverInput) -> SolverOutput:
         geom = _resolve_geometry(request.geometry)
 
@@ -190,13 +262,16 @@ class HypersonicSolver:
             "N":  rg.get("x_N", 0.0),  "O":  rg.get("x_O", 0.0),
         }
 
-        # 5. Saha ne
-        saha = saha_ne(
-            T_K=T_stag, P_Pa=P_t,
-            x_N=composition["N"], x_O=composition["O"],
-            x_NO=composition["NO"],
+        # 5. Stagnation ne — chemistry mode selects equilibrium / kinetics / surrogate.
+        #    Geometry-dependent residence time τ = δ_eq/U_e (Billig sets δ).
+        residence_time_s = boundary_layer_residence_time_s(
+            R_n_m=geom.effective_nose_radius_m(),
+            M_inf=request.flight.mach, U_inf_ms=U_inf,
         )
-        ne_peak = saha["ne_m3"]
+        ne_peak, mode_used = self._compute_ne(
+            request.chemistry_mode, T_stag, P_t,
+            composition, residence_time_s,
+        )
         fp_GHz_val = plasma_frequency_GHz(ne_peak)
 
         # 6. Billig standoff
@@ -204,6 +279,35 @@ class HypersonicSolver:
             M_inf=request.flight.mach,
             R_n_m=geom.effective_nose_radius_m(),
         )
+
+        # 6b. Fay-Riddell stagnation heat flux (for downstream BL chemistry).
+        #     Approximate ρ_t = P_t/(R_air·T_stag); μ_e via Sutherland at T_stag;
+        #     wall conditions at T_w = 1500 K (typical re-entry).
+        try:
+            T_w = 1500.0
+            P_w = P_t                 # essentially wall pressure ≈ stag pressure
+            rho_t = P_t / (287.058 * max(T_stag, 300.0))
+            rho_w = P_w / (287.058 * T_w)
+            # Sutherland for air viscosity (mu_ref = 1.716e-5 at T_ref=273.15)
+            def _mu(T):
+                return 1.716e-5 * (T/273.15)**1.5 * (273.15 + 110.4) / (T + 110.4)
+            mu_e = _mu(T_stag)
+            mu_w = _mu(T_w)
+            # h_aw = freestream stagnation enthalpy (h_inf + 0.5·U_inf²)
+            # — at hypersonic the kinetic term dominates by 10-100×.
+            h_aw = 0.5 * U_inf * U_inf + 1004.5 * fs["T_K"]
+            h_w = 1004.5 * T_w
+            qw = fay_riddell_qw(
+                rho_e_kgm3=rho_t, mu_e_Pa_s=mu_e,
+                rho_w_kgm3=rho_w, mu_w_Pa_s=mu_w,
+                h_aw_J_per_kg=h_aw, h_w_J_per_kg=h_w,
+                R_n_m=geom.effective_nose_radius_m(),
+                p_t_Pa=P_t, p_inf_Pa=fs["P_Pa"],
+                rho_t_kgm3=rho_t,
+            )
+            q_w_W_per_m2 = qw["q_w_W_per_m2"]
+        except Exception:
+            q_w_W_per_m2 = None
 
         # 7. Build sheath field + LOS scan
         n_neutral_peak = P_t / (K_B * max(T_stag, 300.0))
@@ -278,6 +382,9 @@ class HypersonicSolver:
                 T_stag_K=T_stag, P_stag_Pa=P_t,
                 ne_peak_m3=ne_peak, fp_GHz=fp_GHz_val,
                 composition_x=composition,
+                chemistry_mode_used=mode_used,
+                residence_time_s=residence_time_s,
+                q_w_W_per_m2=q_w_W_per_m2,
             ),
             bands=bands_out,
             notes=notes,

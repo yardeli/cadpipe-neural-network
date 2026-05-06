@@ -25,6 +25,8 @@ from .plasma import (
     appleton_hartree_attenuation_dB, cutoff_ne_for_freq,
 )
 from .standoff import billig_sphere_standoff
+from .heat_transfer import fay_riddell_qw, boundary_layer_residence_time_s
+from .kinetics import cantera_residence_time_ne
 
 __all__ = [
     "standard_atmosphere",
@@ -34,4 +36,6 @@ __all__ = [
     "plasma_frequency_Hz", "plasma_frequency_GHz",
     "appleton_hartree_attenuation_dB", "cutoff_ne_for_freq",
     "billig_sphere_standoff",
+    "fay_riddell_qw", "boundary_layer_residence_time_s",
+    "cantera_residence_time_ne",
 ]
