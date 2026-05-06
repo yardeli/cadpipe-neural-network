@@ -1,0 +1,78 @@
+khorium_hypersonic v0.3.0 — GCP verification suite
+Cantera available: True
+PyTorch available: True
+
+======================================================================
+  Axial profiles (20 stations) at 5 flight conditions
+======================================================================
+    sharp_narrow M12.0/35.0km: peak_ne=1.05e+17 @ x=  0.0mm  τmax=  2.0µs  (0.1s)
+     medium_cone M12.0/35.0km: peak_ne=2.63e+17 @ x=  0.0mm  τmax=  4.9µs  (0.0s)
+      blunt_cone M12.0/35.0km: peak_ne=4.17e+17 @ x=  0.0mm  τmax=  7.9µs  (0.1s)
+           ram_c M12.0/35.0km: peak_ne=7.65e+17 @ x=  0.0mm  τmax= 15.0µs  (0.1s)
+      blunt_wide M12.0/35.0km: peak_ne=7.54e+17 @ x=  0.0mm  τmax= 14.7µs  (0.1s)
+         capsule M12.0/35.0km: peak_ne=1.38e+18 @ x=  0.0mm  τmax= 29.4µs  (0.1s)
+    sharp_narrow M18.5/47.0km: peak_ne=2.48e+20 @ x=  0.0mm  τmax=  1.2µs  (0.0s)
+     medium_cone M18.5/47.0km: peak_ne=4.77e+20 @ x=  0.0mm  τmax=  3.0µs  (0.1s)
+      blunt_cone M18.5/47.0km: peak_ne=5.81e+20 @ x=  0.0mm  τmax=  4.8µs  (0.1s)
+           ram_c M18.5/47.0km: peak_ne=6.03e+20 @ x=  0.0mm  τmax=  9.1µs  (0.0s)
+      blunt_wide M18.5/47.0km: peak_ne=6.05e+20 @ x=  0.0mm  τmax=  9.0µs  (0.1s)
+         capsule M18.5/47.0km: peak_ne=7.94e+20 @ x=800.0mm  τmax= 18.0µs  (0.1s)
+    sharp_narrow M22.5/61.0km: peak_ne=2.54e+19 @ x=  0.0mm  τmax=  1.0µs  (0.0s)
+     medium_cone M22.5/61.0km: peak_ne=6.47e+19 @ x=  0.0mm  τmax=  2.6µs  (0.1s)
+      blunt_cone M22.5/61.0km: peak_ne=1.01e+20 @ x=  0.0mm  τmax=  4.2µs  (0.1s)
+           ram_c M22.5/61.0km: peak_ne=8.19e+20 @ x= 78.0mm  τmax=  7.9µs  (0.1s)
+      blunt_wide M22.5/61.0km: peak_ne=1.69e+20 @ x=  0.0mm  τmax=  7.8µs  (0.1s)
+         capsule M22.5/61.0km: peak_ne=3.16e+22 @ x=800.0mm  τmax= 15.6µs  (0.1s)
+    sharp_narrow M23.6/71.0km: peak_ne=9.66e+17 @ x=  0.0mm  τmax=  1.1µs  (0.1s)
+     medium_cone M23.6/71.0km: peak_ne=2.51e+18 @ x=  0.0mm  τmax=  2.6µs  (0.0s)
+      blunt_cone M23.6/71.0km: peak_ne=4.14e+18 @ x=  0.0mm  τmax=  4.2µs  (0.0s)
+           ram_c M23.6/71.0km: peak_ne=6.01e+19 @ x= 78.0mm  τmax=  8.1µs  (0.0s)
+      blunt_wide M23.6/71.0km: peak_ne=8.05e+18 @ x=  0.0mm  τmax=  7.9µs  (0.1s)
+         capsule M23.6/71.0km: peak_ne=5.96e+20 @ x=800.0mm  τmax= 15.9µs  (0.1s)
+    sharp_narrow M23.9/81.0km: peak_ne=1.94e+16 @ x=  0.0mm  τmax=  1.1µs  (0.0s)
+     medium_cone M23.9/81.0km: peak_ne=4.74e+16 @ x=  0.0mm  τmax=  2.7µs  (0.0s)
+      blunt_cone M23.9/81.0km: peak_ne=7.61e+16 @ x=  0.0mm  τmax=  4.4µs  (0.1s)
+           ram_c M23.9/81.0km: peak_ne=2.48e+18 @ x= 78.0mm  τmax=  8.4µs  (0.0s)
+      blunt_wide M23.9/81.0km: peak_ne=1.46e+17 @ x=  0.0mm  τmax=  8.2µs  (0.0s)
+         capsule M23.9/81.0km: peak_ne=1.75e+19 @ x=800.0mm  τmax= 16.5µs  (0.1s)
+
+======================================================================
+  Boundary layer sweep at M=22.5/61km
+======================================================================
+    sharp_narrow R_n= 20.0mm: q_w= 1.11 MW/m²  δ_stag=  150 µm
+     medium_cone R_n= 50.0mm: q_w= 0.70 MW/m²  δ_stag=  238 µm
+      blunt_cone R_n= 80.0mm: q_w= 0.55 MW/m²  δ_stag=  301 µm
+           ram_c R_n=152.4mm: q_w= 0.40 MW/m²  δ_stag=  415 µm
+      blunt_wide R_n=150.0mm: q_w= 0.40 MW/m²  δ_stag=  412 µm
+         capsule R_n=300.0mm: q_w= 0.29 MW/m²  δ_stag=  582 µm
+
+  Fay-Riddell R_n^(-0.5) check: actual=3.873  expected=3.873  PASS
+
+======================================================================
+  Trajectory: 10-point RAM-C-class reentry
+======================================================================
+
+  ram_c: (2.2s)
+    Ku-band blackout intervals: 1
+      t [ 25.0, 110.0]s ( 85.0s)  peak 881 dB
+
+  capsule: (2.1s)
+    Ku-band blackout intervals: 1
+      t [ 25.0, 110.0]s ( 85.0s)  peak 627 dB
+
+  sharp_narrow: (2.1s)
+    Ku-band blackout intervals: 1
+      t [ 40.0, 110.0]s ( 70.0s)  peak 139 dB
+
+======================================================================
+  Monte Carlo UQ: RAM-C M=22.5/61km, N=15
+======================================================================
+  Completed 15 samples in 6.0s
+  ne   mean: 2.61e+20
+  ne   std : 3.92e+19
+  ne   P95 : 3.13e+20
+  ne worst : 3.13e+20
+  Ku blackout probability: 100%
+
+=== TOTAL WALL: 14.1s ===
+Results written to /home/yarden/plasmanet/data/verify_v0_3_0_gcp_results.json
