@@ -154,15 +154,47 @@ def evaluate(
             benchmark.mach, benchmark.temperature_k, benchmark.pressure_pa
         )
 
-    # ── 2. Materialize the mechanism as a Cantera YAML
+    # ── 2. Materialize the mechanism as a Cantera YAML.
+    # If we create the temp file we own its lifetime: the body is wrapped
+    # in a try/finally so the file is unlinked on every return path
+    # (success, Cantera load failure, reactor failure). When the caller
+    # supplies a path we leave it alone — that's the v5-worker pattern
+    # (one reused path per worker) and the caller manages cleanup.
     import tempfile
+    _owned_yaml_path: Optional[Path] = None
     if cantera_yaml_path is None:
         with tempfile.NamedTemporaryFile(
             mode='w', suffix='.yaml', delete=False
         ) as tf:
             tf.write(mechanism.to_cantera_yaml())
             cantera_yaml_path = Path(tf.name)
+            _owned_yaml_path = cantera_yaml_path
 
+    try:
+        return _evaluate_with_yaml(
+            cantera_yaml_path=cantera_yaml_path,
+            benchmark=benchmark,
+            T_post=T_post, P_post=P_post,
+            residence_time_s=residence_time_s,
+        )
+    finally:
+        if _owned_yaml_path is not None:
+            try:
+                _owned_yaml_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def _evaluate_with_yaml(
+    cantera_yaml_path: Path,
+    benchmark,
+    T_post: float, P_post: float,
+    residence_time_s: float,
+) -> dict:
+    """Inner body of :func:`evaluate`. Extracted so the outer function's
+    try/finally only wraps work that follows YAML materialization — keeps
+    the leak-fix readable and lets us unit-test the inner path with a
+    pre-existing YAML."""
     # ── 3. Build Cantera Solution
     try:
         gas = ct.Solution(str(cantera_yaml_path))
