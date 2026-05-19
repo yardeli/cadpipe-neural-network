@@ -44,7 +44,13 @@ from .chemistry import saha_ne, janaf_air_equilibrium
 from .kinetics import cantera_residence_time_ne
 
 
-_NORMAL_SHOCK_THRESHOLD_DEG = 30.0   # surface angle above which we treat as normal-shock-dominated
+_NORMAL_SHOCK_THRESHOLD_DEG = 30.0   # surface-angle gate for the normal-shock branch
+_NORMAL_SHOCK_CURVATURE_GATE = 0.5   # min (local_curvature × R_nose_eff) for the normal-shock branch:
+                                     # only fire on regions with meaningful curvature (sphere-cap nose),
+                                     # never on a flat conical face. Without this, every cone with
+                                     # half-angle ≥ 30° (e.g. the `capsule` preset) silently picked up
+                                     # stagnation T on every afterbody station, producing the
+                                     # 3.16e+22 M22.5/61 km afterbody anomaly in GCP_VERIFY_V0_3_0 §4.
 
 
 # ── Local shock helpers ──────────────────────────────────────────────
@@ -209,6 +215,37 @@ def compute_axial_profile(
     T_stag_real = rg.get("T_t_real_K", sh_stag["T2_K"])
     rho_e_stag = P_t / (R_AIR * max(T_stag_real, 300.0))
 
+    # Pre-compute the real-gas post-shock T for the body's effective
+    # oblique half-angle, mirroring T_stag_real on the normal branch.
+    # The oblique-shock energy budget is ½(U_inf² − U_2²); we re-use the
+    # stagnation Cantera bisection with an "effective" inflow velocity
+    # ``U_eff = sqrt(U_inf² − U_2²)`` and the actual oblique post-shock
+    # pressure. Without this the conical afterbody of high-half-angle
+    # bodies (e.g. the capsule preset, half-angle 30°) carries a
+    # **frozen** T ≈ 9000 K into the kinetics reactor — chemistry never
+    # gets to absorb the dissociation enthalpy — and over-predicts ne
+    # by an order of magnitude (GCP_VERIFY_V0_3_0 §4 anomaly).
+    ha_eff_rad = math.radians(getattr(geometry, "effective_half_angle_deg",
+                                       lambda: 9.0)())
+    _ob_eff = oblique_shock_post(mach, ha_eff_rad)
+    if _ob_eff is None:
+        T_oblique_real = T_stag_real
+    else:
+        beta_eff = _ob_eff["beta_rad"]
+        P_obl_eff = fs["P_Pa"] * _ob_eff["p_ratio"]
+        U_n1 = U_inf * math.sin(beta_eff)
+        U_n2 = U_n1 / max(_ob_eff["rho_ratio"], 1e-9)
+        U_t = U_inf * math.cos(beta_eff)
+        U_2 = math.sqrt(U_n2 * U_n2 + U_t * U_t)
+        U_eff = math.sqrt(max(U_inf * U_inf - U_2 * U_2, 0.0))
+        rg_obl = stagnation_T_real_gas(
+            T_inf_K=fs["T_K"], P_inf_Pa=fs["P_Pa"],
+            U_inf_ms=U_eff, P_t_Pa=P_obl_eff,
+        )
+        T_oblique_real = rg_obl.get(
+            "T_t_real_K", max(fs["T_K"] * _ob_eff["T_ratio"], fs["T_K"]),
+        )
+
     stations: list[AxialStation] = []
     xs = geometry.axial_stations(n_stations)
 
@@ -240,7 +277,16 @@ def compute_axial_profile(
         # real-gas stagnation T for normal-shock regions (chemistry-
         # absorbs energy), real-gas-corrected T for oblique by scaling
         # the frozen oblique result by (T_real / T_frozen_normal).
-        if surf_deg >= _NORMAL_SHOCK_THRESHOLD_DEG:
+        #
+        # Normal-shock treatment is appropriate only at near-stagnation
+        # points: surface highly normal to flow AND meaningful local
+        # curvature. A conical afterbody at half-angle ≥ 30° has the
+        # surface-angle criterion satisfied but ~zero meridional
+        # curvature — flow is obliquely turned, not brought to rest —
+        # so it falls through to the oblique branch.
+        curvature_scale = curv * geometry.effective_nose_radius_m()
+        if (surf_deg >= _NORMAL_SHOCK_THRESHOLD_DEG
+                and curvature_scale >= _NORMAL_SHOCK_CURVATURE_GATE):
             shock_kind = "normal"
             T_e = T_stag_real
             P_e = P_t
@@ -255,12 +301,17 @@ def compute_axial_profile(
                 rho_e = rho_e_stag; U_e = U_inf / sh_stag["rho_ratio"]
             else:
                 shock_kind = "oblique"
-                # Use frozen oblique T_2 directly: an oblique shock at
-                # small turning angles compresses much less than a normal
-                # shock, so its post-shock T is already close to physical
-                # without needing the chemistry-sink correction (which is
-                # specific to flow brought to rest at the stagnation point).
-                T_e = max(fs["T_K"] * ob["T_ratio"], fs["T_K"])
+                # Real-gas-corrected post-oblique-shock T. The frozen
+                # value `fs_T × ob[T_ratio]` overstates the local T by
+                # 30–50% on strong oblique shocks (e.g. M=22.5, θ=30°
+                # gives 9070 K frozen vs ~5500 K equilibrated) because
+                # N2 / O2 dissociation absorbs a large fraction of the
+                # post-shock thermal enthalpy. ``T_oblique_real`` is the
+                # body-effective real-gas value precomputed above; we
+                # take the larger of it and the local-θ frozen T to keep
+                # the small-angle-shock limit intact.
+                T_frozen_local = max(fs["T_K"] * ob["T_ratio"], fs["T_K"])
+                T_e = min(T_frozen_local, max(T_oblique_real, fs["T_K"]))
                 P_e = fs["P_Pa"] * ob["p_ratio"]
                 rho_e = P_e / (R_AIR * max(T_e, 300.0))
                 U_e = U_inf * math.cos(ob["beta_rad"])  # tangential preserved
