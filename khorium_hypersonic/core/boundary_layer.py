@@ -60,6 +60,7 @@ def fay_riddell_full(
     Le: float = 1.4,
     h_d_J_per_kg: float = 0.0,
     catalytic: bool = True,
+    sweep_angle_rad: float = 0.0,
 ) -> dict:
     """Full Fay-Riddell stagnation point heat flux.
 
@@ -74,9 +75,17 @@ def fay_riddell_full(
     Newtonian theory:
         du_e/dx|_stag = (1/R_n) · √(2(p_t - p_∞)/ρ_t)
 
+    Swept-leading-edge attachment-line correction (Beckwith & Gallagher
+    1961, NASA TN D-6135; Anderson 2006 §6.6): only the freestream
+    component normal to the leading edge drives the bow shock, so the
+    stagnation-region velocity gradient — and therefore q_w — scale as
+    cos²Λ. With ``sweep_angle_rad = 0`` (the default) the prefactor is
+    1.0 and behaviour is identical to the pre-correction form.
+
     All inputs in SI. Returns dict with q_w (W/m²), du_e_dx (1/s),
-    driving_h (J/kg), Le_correction (dimensionless), and the regime
-    flag ('catalytic' or 'non_catalytic').
+    driving_h (J/kg), Le_correction (dimensionless), the regime flag
+    ('catalytic' or 'non_catalytic'), and ``sweep_correction`` (cos²Λ)
+    for diagnostics.
 
     The driving enthalpy h_e ≈ h_aw at hypersonic — it's the freestream
     stagnation enthalpy (h_∞ + ½U_∞²), of which the kinetic term
@@ -103,13 +112,18 @@ def fay_riddell_full(
     if catalytic and h_d_J_per_kg > 0 and h_e_J_per_kg > 0:
         le_correction = 1.0 + (Le ** a_lewis - 1.0) * (h_d_J_per_kg / h_e_J_per_kg)
 
-    q_w = prefactor * edge_term * wall_term * math.sqrt(du_dx) * driving * le_correction
+    sweep = max(min(math.cos(sweep_angle_rad), 1.0), 0.0)
+    sweep_correction = sweep * sweep
+
+    q_w = (prefactor * edge_term * wall_term * math.sqrt(du_dx)
+           * driving * le_correction * sweep_correction)
 
     return {
         "q_w_W_per_m2": q_w,
         "du_e_dx_per_s": du_dx,
         "driving_enthalpy_J_per_kg": driving,
         "lewis_correction": le_correction,
+        "sweep_correction": sweep_correction,
         "regime": "catalytic" if catalytic else "non_catalytic",
     }
 
@@ -211,8 +225,15 @@ def bl_summary(
     p_t_Pa: float, p_inf_Pa: float, rho_t_kgm3: float,
     h_d_J_per_kg: float = 0.0,
     Pr: float = 0.71, Le: float = 1.4,
+    sweep_angle_rad: float = 0.0,
 ) -> dict:
-    """One-shot bundle: q_w, δ_stag, BL edge state. Used by solver.py."""
+    """One-shot bundle: q_w, δ_stag, BL edge state. Used by solver.py.
+
+    Pass ``sweep_angle_rad`` for swept-LE strips; 0 keeps the unswept
+    behaviour. The strip aggregator wires per-strip local sweep angle
+    through here so attachment-line heating is no longer over-predicted
+    by a factor of (1 − cos²Λ) ≈ 0.75 – 0.93 on 60 – 75° swept LEs.
+    """
     mu_e = air_viscosity(T_e_K)
     mu_w = air_viscosity(T_w_K)
     qw = fay_riddell_full(
@@ -222,6 +243,7 @@ def bl_summary(
         rho_t_kgm3=rho_t_kgm3,
         Pr=Pr, Le=Le, h_d_J_per_kg=h_d_J_per_kg,
         catalytic=True,
+        sweep_angle_rad=sweep_angle_rad,
     )
     delta_stag = bl_thickness_stagnation(R_n_m, U_inf_ms, rho_e_kgm3, mu_e)
     return {
