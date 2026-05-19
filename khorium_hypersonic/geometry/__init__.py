@@ -18,10 +18,12 @@ from .base import Geometry, BoundingBox
 from .sphere_cone import SphereCone
 from .capsule import Capsule
 from .from_mesh import MeshGeometry
+from .raycast_mesh import RaycastMesh, RaycastMeshMeridian
 from .presets import GEOMETRY_PRESETS
 
 __all__ = [
     "Geometry", "BoundingBox",
     "SphereCone", "Capsule", "MeshGeometry",
+    "RaycastMesh", "RaycastMeshMeridian",
     "GEOMETRY_PRESETS",
 ]

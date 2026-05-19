@@ -41,7 +41,9 @@ from .solver_trajectory import (
     TrajectoryPoint, TrajectoryResult, BlackoutInterval, solve_trajectory,
 )
 from .geometry import (
-    Geometry, SphereCone, Capsule, MeshGeometry, GEOMETRY_PRESETS,
+    Geometry, SphereCone, Capsule, MeshGeometry,
+    RaycastMesh, RaycastMeshMeridian,
+    GEOMETRY_PRESETS,
 )
 from .chemistry import Mechanism, PARK_47
 from .search import exhaustive_search, sobol_bayesian_search, genetic_search
@@ -58,7 +60,8 @@ __all__ = [
     # Trajectory simulator
     "TrajectoryPoint", "TrajectoryResult", "BlackoutInterval", "solve_trajectory",
     # Geometry
-    "Geometry", "SphereCone", "Capsule", "MeshGeometry", "GEOMETRY_PRESETS",
+    "Geometry", "SphereCone", "Capsule", "MeshGeometry",
+    "RaycastMesh", "RaycastMeshMeridian", "GEOMETRY_PRESETS",
     # Chemistry + search
     "Mechanism", "PARK_47",
     "exhaustive_search", "sobol_bayesian_search", "genetic_search",
