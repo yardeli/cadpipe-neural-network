@@ -63,6 +63,13 @@ from .surrogate import (
     freestream_features,
     HAVE_TORCH,
 )
+from .fuel_axis import (
+    FuelKind,
+    H2_SPECIES, H2_REACTIONS,
+    CH4_SPECIES, CH4_REACTIONS,
+    composite_air_fuel_mechanism,
+    fuel_initial_composition,
+)
 
 __all__ = [
     # generator
@@ -86,4 +93,9 @@ __all__ = [
     "MechanismFingerprint", "MechanismSurrogate", "TrainingExample",
     "train_surrogate", "register_surrogate_evaluator",
     "freestream_features", "HAVE_TORCH",
+    # fuel axis (v5.2)
+    "FuelKind",
+    "H2_SPECIES", "H2_REACTIONS",
+    "CH4_SPECIES", "CH4_REACTIONS",
+    "composite_air_fuel_mechanism", "fuel_initial_composition",
 ]
